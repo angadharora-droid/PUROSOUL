@@ -44,9 +44,31 @@ Prerequisites: **Node.js ≥ 18** and a running **MongoDB** instance.
 ```bash
 cd backend
 npm install
-copy .env.example .env      # adjust values as needed (cp on macOS/Linux)
+# create a .env file (see template below)
 npm run seed                # creates default users + sample schemes
 npm run dev                 # http://localhost:5000
+```
+
+Create `backend/.env` with:
+
+```ini
+NODE_ENV=development
+PORT=5000
+CLIENT_URL=http://localhost:5173
+MONGODB_URI=mongodb://127.0.0.1:27017/scheme-tracker
+JWT_SECRET=replace-with-a-long-random-string
+JWT_EXPIRES_IN=7d
+UPLOAD_DIR=uploads
+
+# Email (leave blank to disable outgoing mail in development)
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASS=
+# Must match the authenticated mailbox for most providers
+MAIL_FROM="Puro Soul Scheme Tracker <you@yourdomain.com>"
+# Fallback recipient for registration emails when none are configured in Settings
+ACCOUNTS_EMAIL=
 ```
 
 ### 2. Frontend
