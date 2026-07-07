@@ -6,7 +6,7 @@ async function start() {
   try {
     await connectDB();
     const server = app.listen(env.port, () => {
-      console.log(`API running on http://localhost:${env.port} (${env.nodeEnv})`);
+      console.log(`API listening on port ${env.port} (${env.nodeEnv})`);
     });
 
     server.on('error', (err) => {
