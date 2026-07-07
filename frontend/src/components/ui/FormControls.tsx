@@ -1,4 +1,12 @@
-import { forwardRef, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
+import {
+  forwardRef,
+  useState,
+  type InputHTMLAttributes,
+  type ReactNode,
+  type SelectHTMLAttributes,
+  type TextareaHTMLAttributes,
+} from 'react';
+import { Eye, EyeOff } from 'lucide-react';
 
 interface FieldWrapperProps {
   label?: string;
@@ -38,6 +46,35 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
   )
 );
 Input.displayName = 'Input';
+
+/** Password field with a show/hide (eye) toggle. */
+export const PasswordInput = forwardRef<HTMLInputElement, Omit<InputProps, 'type'>>(
+  ({ label, error, hint, required, className = '', ...props }, ref) => {
+    const [visible, setVisible] = useState(false);
+    return (
+      <FieldWrapper label={label} error={error} required={required} hint={hint}>
+        <div className="relative">
+          <input
+            ref={ref}
+            type={visible ? 'text' : 'password'}
+            className={`input-base pr-10 ${error ? 'input-error' : ''} ${className}`}
+            {...props}
+          />
+          <button
+            type="button"
+            tabIndex={-1}
+            onClick={() => setVisible((v) => !v)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-gray-400 transition hover:text-gray-600 dark:hover:text-gray-300"
+            aria-label={visible ? 'Hide password' : 'Show password'}
+          >
+            {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+        </div>
+      </FieldWrapper>
+    );
+  }
+);
+PasswordInput.displayName = 'PasswordInput';
 
 interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   label?: string;

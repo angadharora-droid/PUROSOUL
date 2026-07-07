@@ -4,7 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import Logo from '@/components/Logo';
 import Button from '@/components/ui/Button';
-import { Input } from '@/components/ui/FormControls';
+import { Input, PasswordInput } from '@/components/ui/FormControls';
 import { useAuth } from '@/context/AuthContext';
 import { getApiErrorMessage } from '@/lib/api';
 
@@ -67,9 +67,8 @@ export default function LoginPage() {
                 pattern: { value: /^\S+@\S+\.\S+$/, message: 'Enter a valid email address' },
               })}
             />
-            <Input
+            <PasswordInput
               label="Password"
-              type="password"
               placeholder="••••••••"
               autoComplete="current-password"
               required

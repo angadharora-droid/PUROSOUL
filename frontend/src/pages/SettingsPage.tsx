@@ -10,7 +10,7 @@ import DataTable from '@/components/ui/DataTable';
 import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import { Modal } from '@/components/ui/Modal';
 import { BooleanBadge } from '@/components/ui/Badge';
-import { Input, Select } from '@/components/ui/FormControls';
+import { Input, PasswordInput, Select } from '@/components/ui/FormControls';
 import { changePassword } from '@/api/auth';
 import { createUser, fetchUsers, updateUser } from '@/api/users';
 import { fetchValidationEmails, updateValidationEmails } from '@/api/settings';
@@ -211,17 +211,15 @@ export default function SettingsPage() {
               className="space-y-4"
               noValidate
             >
-              <Input
+              <PasswordInput
                 label="Current Password"
-                type="password"
                 autoComplete="current-password"
                 required
                 error={pwForm.formState.errors.currentPassword?.message}
                 {...pwForm.register('currentPassword', { required: 'Current password is required' })}
               />
-              <Input
+              <PasswordInput
                 label="New Password"
-                type="password"
                 autoComplete="new-password"
                 required
                 error={pwForm.formState.errors.newPassword?.message}
@@ -230,9 +228,8 @@ export default function SettingsPage() {
                   minLength: { value: 8, message: 'Minimum 8 characters' },
                 })}
               />
-              <Input
+              <PasswordInput
                 label="Confirm New Password"
-                type="password"
                 autoComplete="new-password"
                 required
                 error={pwForm.formState.errors.confirmPassword?.message}
@@ -356,9 +353,8 @@ export default function SettingsPage() {
               pattern: { value: /^\S+@\S+\.\S+$/, message: 'Enter a valid email' },
             })}
           />
-          <Input
+          <PasswordInput
             label="Password"
-            type="password"
             required
             error={newUserForm.formState.errors.password?.message}
             {...newUserForm.register('password', {
