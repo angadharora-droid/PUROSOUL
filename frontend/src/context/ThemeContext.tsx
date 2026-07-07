@@ -8,11 +8,8 @@ interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [dark, setDark] = useState(() => {
-    const stored = localStorage.getItem('theme');
-    if (stored) return stored === 'dark';
-    return window.matchMedia('(prefers-color-scheme: dark)').matches;
-  });
+  // Light mode is the default; dark mode only when the user has explicitly chosen it.
+  const [dark, setDark] = useState(() => localStorage.getItem('theme') === 'dark');
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark);
