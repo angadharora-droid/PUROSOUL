@@ -19,6 +19,14 @@ if (env.nodeEnv === 'development') app.use(morgan('dev'));
 // Uploaded payment screenshots
 app.use('/uploads', express.static(path.resolve(env.uploadDir)));
 
+app.get('/', (_req, res) =>
+  res.json({
+    success: true,
+    message: 'Puro Soul Scheme Tracker API',
+    health: '/api/health',
+    docs: 'https://github.com/angadharora-droid/PUROSOUL#api-overview-all-under-api',
+  })
+);
 app.get('/api/health', (_req, res) => res.json({ success: true, message: 'OK' }));
 app.use('/api', routes);
 
