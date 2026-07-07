@@ -1,0 +1,12 @@
+# Dependencies & builds (also covered by nested .gitignore files — kept here as a safety net)
+node_modules/
+dist/
+
+# Secrets — never commit environment files
+.env
+.env.local
+
+# Local artifacts
+registration-pdf-preview.pdf
+Thumbs.db
+.DS_Store
