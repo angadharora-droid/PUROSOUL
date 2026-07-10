@@ -7,7 +7,8 @@ dist/
 .env.local
 .env.example
 
-# Local artifacts
+# Local artifacts (saved report attachments + import progress state)
+backend/data/
 registration-pdf-preview.pdf
 Thumbs.db
 .DS_Store

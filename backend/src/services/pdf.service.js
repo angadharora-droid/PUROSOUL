@@ -124,7 +124,7 @@ export function buildRegistrationPdf(registration) {
     grid([
       ['Scheme', snap.name],
       ['Activation Date', dateTime.format(new Date(registration.activationDate))],
-      ['Expiry Date', dateTime.format(new Date(registration.expiryDate))],
+      ['Expiry Date', dateOnly.format(new Date(registration.expiryDate))],
     ]);
     statBoxes([
       ['Advance Payment', inr(snap.advanceAmount)],
