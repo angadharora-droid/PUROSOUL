@@ -52,7 +52,6 @@ export default function RegistrationDetailPage() {
     () => [
       { accessorKey: 'dispatchDate', header: 'Date', cell: ({ getValue }) => formatDate(getValue<string>()) },
       { accessorKey: 'billNumber', header: 'Bill No.' },
-      { accessorKey: 'vehicleNumber', header: 'Vehicle', cell: ({ getValue }) => getValue<string>() || '—' },
       {
         accessorKey: 'totalCases',
         header: 'Total',
@@ -60,7 +59,6 @@ export default function RegistrationDetailPage() {
           <span className="font-semibold text-gray-900 dark:text-white">{formatNumber(getValue<number>())}</span>
         ),
       },
-      { id: 'by', header: 'Added By', accessorFn: (d) => d.createdBy?.name ?? '—' },
     ],
     []
   );
