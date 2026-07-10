@@ -188,7 +188,7 @@ export default function RegistrationDetailPage() {
                 <DetailRow label="Validity" value={`${snap.validityDays} days`} />
                 <DetailRow label="Registered On" value={formatDate(registration.registrationDate)} />
                 <DetailRow label="Activation" value={formatDateTime(registration.activationDate)} />
-                <DetailRow label="Expiry" value={formatDateTime(registration.expiryDate)} />
+                <DetailRow label="Expiry" value={formatDate(registration.expiryDate)} />
               </dl>
             </CardBody>
           </Card>

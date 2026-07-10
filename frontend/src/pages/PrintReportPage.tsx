@@ -105,7 +105,7 @@ export default function PrintReportPage() {
               ['Sales Target', `${formatNumber(snap.targetCases)} cases`],
               ['Validity', `${snap.validityDays} days`],
               ['Activation Date', formatDateTime(reg.activationDate)],
-              ['Expiry Date', formatDateTime(reg.expiryDate)],
+              ['Expiry Date', formatDate(reg.expiryDate)],
             ]}
           />
         </Section>

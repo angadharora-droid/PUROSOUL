@@ -69,6 +69,16 @@ SMTP_PASS=
 MAIL_FROM="Puro Soul Scheme Tracker <you@yourdomain.com>"
 # Fallback recipient for registration emails when none are configured in Settings
 ACCOUNTS_EMAIL=
+
+# Mailbox the vendor's daily sales report (AFVPL Tally export) arrives in —
+# read over IMAP by the dispatch auto-import job
+REPORT_IMAP_HOST=imap.rediffmailpro.com
+REPORT_IMAP_PORT=993
+REPORT_EMAIL_USER=report@cpgh.in
+REPORT_EMAIL_PASSWORD=
+# How far back the FIRST run searches for report emails (backfills history);
+# later runs resume from the last processed email automatically
+REPORT_LOOKBACK_DAYS=45
 ```
 
 ### 2. Frontend
@@ -92,9 +102,38 @@ npm run dev                 # http://localhost:5173 (proxies /api and /uploads t
 
 Two emails are sent automatically: **Scheme Registration Validation** (payment details, sent the moment a registration is saved) and **Scheme Target Achieved** (on completion). Recipients are managed by the admin in **Settings → Validation Emails** (stored in the database); if none are configured, the `ACCOUNTS_EMAIL` from `backend/.env` is used as a fallback, and the completion email additionally goes to the sales employee who created the registration. Configure `SMTP_*` and `MAIL_FROM` in `backend/.env`. If SMTP is not configured, the app logs the email instead of failing.
 
+### Dispatch auto-import from the daily sales email
+
+An employee mails the **AFVPL daily sales report** (Tally "Ledger Account" export, one tab per month) every day except Sunday. The job `backend/src/jobs/fetchDispatchEmail.js`:
+
+1. Logs into the report mailbox over IMAP (`REPORT_*` env vars) and finds **every report email not processed yet** (subject "daily sales"/"sales report" or an `AFVPL`/`purosoul` attachment, from Amarjit Fiscal), importing them oldest first. Progress is remembered in `backend/data/dispatch-import-state.json`; the first run looks back `REPORT_LOOKBACK_DAYS` (default 45) to backfill history.
+2. Saves a copy of each Excel attachment to `backend/data/attachments/` and parses every monthly tab: party name from **Particulars**, total cases from **Quantity**, and **Voucher No.** as the dispatch bill number (the report has no case-size split, so imported dispatches carry the total only).
+3. Matches each invoice's party name (case-insensitive) against active scheme registrations and records a dispatch through the normal dispatch flow — progress, completion, benefit and audit log all update exactly as for a manual entry. Imported entries show as source `EMAIL_IMPORT`, added by "Email Import (auto)".
+4. Skips safely: vouchers already recorded (the monthly file re-sends every prior day), `NIL` no-sale rows, Grand Total rows, invoices dated outside a scheme's validity, and parties without a registration.
+
+Missed days heal themselves: the workbook is cumulative, so when the employee is on holiday or forgets to send it, the next email they do send contains all the missed invoices and the job catches up in one go — without ever double-counting.
+
+Run it manually anytime — re-runs never duplicate:
+
+```bash
+cd backend
+npm run import:dispatch-email                      # fetch from the mailbox
+npm run import:dispatch-email -- --file report.xlsx  # import a file on disk
+```
+
+The report has no fixed send time (usually between 9 AM and 2 PM), so schedule the job to check **hourly from 9 AM to 4 PM, Monday–Saturday** — runs that find no new mail exit in seconds, and the state file guarantees each email is only imported once (run from an elevated prompt, adjust the path):
+
+```bat
+schtasks /Create /TN "Purosoul Dispatch Import" /SC WEEKLY /D MON,TUE,WED,THU,FRI,SAT ^
+  /ST 09:00 /RI 60 /DU 0007:00 ^
+  /TR "cmd /c cd /d C:\path\to\purosoul\backend && npm run import:dispatch-email"
+```
+
+(`/RI 60 /DU 0007:00` = repeat every 60 minutes for 7 hours, i.e. 9:00–16:00. A report that arrives even later is simply picked up by the next day's first run — nothing is lost.)
+
 ## Business Rules Implemented
 
-- Registrations activate **immediately on creation**: activation = now, **expiry auto-calculated** = activation + scheme validity days; scheme terms are snapshotted so later scheme edits never change running registrations. Registration date can never be in the past.
+- Registrations activate **immediately on creation**: activation = now, **expiry auto-calculated** = activation + scheme validity days. The deadline is a **whole day, not a time**: the scheme stays valid through the end of its expiry day, and expiry is displayed date-only everywhere. Scheme terms are snapshotted so later scheme edits never change running registrations. Registration date can never be in the past.
 - A **payment attachment (screenshot/receipt) is compulsory for every payment mode** (JPG/PNG/WEBP/PDF, ≤ 5 MB, preview before upload); the UTR/reference number is optional.
 - Saving a registration **automatically sends the validation email** to all configured recipients — the send is recorded in the audit log and a mail failure never blocks the save.
 - Dispatches: only against active schemes, **globally unique bill numbers**, date must be within activation–expiry, total cases (250 ml + 500 ml + 1 L) auto-calculated, at least one case required.

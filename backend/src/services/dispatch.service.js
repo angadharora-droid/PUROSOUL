@@ -13,8 +13,8 @@ export async function addDispatch({ body, user }) {
   );
   if (!registration) throw new ApiError(404, 'Registration not found');
 
-  // Lazily expire before validating the dispatch window.
-  if (registration.status === 'ACTIVE' && registration.expiryDate < new Date()) {
+  // Lazily expire before validating the dispatch window (day-granular: the whole expiry day is valid).
+  if (registration.status === 'ACTIVE' && endOfDay(registration.expiryDate) < new Date()) {
     registration.status = 'EXPIRED';
     registration.benefitEarned = 0;
     await registration.save();
@@ -46,7 +46,10 @@ export async function addDispatch({ body, user }) {
     cases250ml: body.cases250ml || 0,
     cases500ml: body.cases500ml || 0,
     cases1l: body.cases1l || 0,
+    // Email imports only know the total; manual entries derive it from the size split.
+    totalCases: body.totalCases || 0,
     remarks: body.remarks || undefined,
+    source: body.source || 'MANUAL',
     createdBy: user._id,
   });
 

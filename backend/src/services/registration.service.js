@@ -7,10 +7,14 @@ import { logAudit, getRegistrationTimeline } from './audit.service.js';
 import { sendValidationEmail as sendValidationEmailTemplate } from './email.service.js';
 import { buildRegistrationPdf } from './pdf.service.js';
 
-/** Marks every overdue ACTIVE registration as EXPIRED (lazy evaluation, run before reads). */
+/**
+ * Marks every overdue ACTIVE registration as EXPIRED (lazy evaluation, run before reads).
+ * Expiry is day-granular: a scheme stays valid through the whole of its expiry day,
+ * regardless of the time-of-day stored on expiryDate.
+ */
 export async function expireOverdue() {
   const res = await SchemeRegistration.updateMany(
-    { status: 'ACTIVE', expiryDate: { $lt: new Date() } },
+    { status: 'ACTIVE', expiryDate: { $lt: startOfDay() } },
     { $set: { status: 'EXPIRED', benefitEarned: 0 } }
   );
   return res.modifiedCount;
@@ -26,7 +30,8 @@ export function computeProgress(reg) {
 
   let daysLeft = null;
   if (reg.expiryDate && ['ACTIVE', 'COMPLETED'].includes(reg.status)) {
-    daysLeft = Math.max(0, Math.ceil((new Date(reg.expiryDate).getTime() - Date.now()) / 86400000));
+    // Count whole days: the expiry day itself counts as 1 day left.
+    daysLeft = Math.max(0, Math.ceil((endOfDay(reg.expiryDate).getTime() - Date.now()) / 86400000));
   }
 
   const eligibleForBenefit =
@@ -93,7 +98,8 @@ export async function createRegistration({ body, file, user }) {
     remarks: body.remarks || undefined,
     status: 'ACTIVE',
     activationDate,
-    expiryDate: addDays(activationDate, scheme.validityDays),
+    // Deadline is a whole day, not a time: valid through the end of the last validity day.
+    expiryDate: endOfDay(addDays(activationDate, scheme.validityDays)),
     createdBy: user._id,
   });
 

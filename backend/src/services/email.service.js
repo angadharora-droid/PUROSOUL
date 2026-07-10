@@ -13,6 +13,7 @@ if (env.smtp.host && env.smtp.user) {
 }
 
 const dateFmt = new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+const dateOnlyFmt = new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium' });
 const inr = (n) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 
 function layout(title, rows) {
@@ -76,7 +77,7 @@ export async function sendValidationEmail(registration, attachments = []) {
       ['Payment Mode', registration.paymentMode],
       ['UTR Number', registration.utrNumber || '—'],
       ['Activation Date', dateFmt.format(registration.activationDate)],
-      ['Expiry Date', dateFmt.format(registration.expiryDate)],
+      ['Expiry Date', dateOnlyFmt.format(registration.expiryDate)],
       ['Sales Target', `${snap.targetCases.toLocaleString('en-IN')} cases`],
     ]),
   });

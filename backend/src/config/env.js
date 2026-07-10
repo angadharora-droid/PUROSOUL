@@ -25,6 +25,17 @@ const env = {
     from: process.env.MAIL_FROM || 'Scheme Tracker <no-reply@company.com>',
   },
   accountsEmail: process.env.ACCOUNTS_EMAIL || '',
+  // Mailbox the vendor's daily sales report arrives in (read via IMAP by
+  // src/jobs/fetchDispatchEmail.js).
+  reportMail: {
+    host: process.env.REPORT_IMAP_HOST || 'imap.rediffmailpro.com',
+    port: Number(process.env.REPORT_IMAP_PORT) || 993,
+    user: process.env.REPORT_EMAIL_USER || 'report@cpgh.in',
+    pass: process.env.REPORT_EMAIL_PASSWORD || '',
+    // How far back the first run searches for report emails (later runs resume
+    // from the last processed email instead).
+    lookbackDays: Number(process.env.REPORT_LOOKBACK_DAYS) || 45,
+  },
 };
 
 export default env;

@@ -23,13 +23,17 @@ const dispatchSchema = new mongoose.Schema(
     cases1l: { type: Number, default: 0, min: 0 },
     totalCases: { type: Number, default: 0, min: 0 },
     remarks: { type: String, trim: true, maxlength: 500 },
+    source: { type: String, enum: ['MANUAL', 'EMAIL_IMPORT'], default: 'MANUAL' },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   },
   { timestamps: true }
 );
 
 dispatchSchema.pre('validate', function computeTotal(next) {
-  this.totalCases = (this.cases250ml || 0) + (this.cases500ml || 0) + (this.cases1l || 0);
+  // Imported dispatches only carry a total (the vendor report has no size split),
+  // so a provided totalCases is kept when no per-size counts are given.
+  const sum = (this.cases250ml || 0) + (this.cases500ml || 0) + (this.cases1l || 0);
+  if (sum > 0 || !this.totalCases) this.totalCases = sum;
   next();
 });
 
