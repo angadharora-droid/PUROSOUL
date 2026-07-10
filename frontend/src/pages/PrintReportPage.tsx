@@ -147,7 +147,7 @@ export default function PrintReportPage() {
             <table className="w-full border-collapse text-xs">
               <thead>
                 <tr className="bg-gray-100 text-left">
-                  {['#', 'Date', 'Bill No.', 'Vehicle', '250 ml', '500 ml', '1 L', 'Total'].map((h) => (
+                  {['#', 'Date', 'Bill No.', 'Vehicle', 'Total Cases'].map((h) => (
                     <th key={h} className="border border-gray-300 px-2 py-1.5 font-semibold">
                       {h}
                     </th>
@@ -161,9 +161,6 @@ export default function PrintReportPage() {
                     <td className="border border-gray-300 px-2 py-1">{formatDate(d.dispatchDate)}</td>
                     <td className="border border-gray-300 px-2 py-1">{d.billNumber}</td>
                     <td className="border border-gray-300 px-2 py-1">{d.vehicleNumber || '—'}</td>
-                    <td className="border border-gray-300 px-2 py-1 text-right">{formatNumber(d.cases250ml)}</td>
-                    <td className="border border-gray-300 px-2 py-1 text-right">{formatNumber(d.cases500ml)}</td>
-                    <td className="border border-gray-300 px-2 py-1 text-right">{formatNumber(d.cases1l)}</td>
                     <td className="border border-gray-300 px-2 py-1 text-right font-semibold">
                       {formatNumber(d.totalCases)}
                     </td>
@@ -173,9 +170,6 @@ export default function PrintReportPage() {
                   <td colSpan={4} className="border border-gray-300 px-2 py-1.5">
                     Case Summary ({totals.trips} trip{totals.trips === 1 ? '' : 's'})
                   </td>
-                  <td className="border border-gray-300 px-2 py-1.5 text-right">{formatNumber(totals.cases250ml)}</td>
-                  <td className="border border-gray-300 px-2 py-1.5 text-right">{formatNumber(totals.cases500ml)}</td>
-                  <td className="border border-gray-300 px-2 py-1.5 text-right">{formatNumber(totals.cases1l)}</td>
                   <td className="border border-gray-300 px-2 py-1.5 text-right">{formatNumber(totals.totalCases)}</td>
                 </tr>
               </tbody>

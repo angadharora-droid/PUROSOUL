@@ -107,6 +107,22 @@ export interface Paginated<T> {
   limit: number;
 }
 
+export interface ReportImport {
+  _id: string;
+  source: 'EMAIL' | 'FILE';
+  emailDate?: string;
+  emailSubject?: string;
+  filename?: string;
+  invoicesInFile: number;
+  dispatchesCreated: number;
+  casesAdded: number;
+  duplicates: number;
+  unmatchedParties: number;
+  skipped: number;
+  created: { party: string; cases: number; voucherNo: string; date: string; scheme: string }[];
+  createdAt: string;
+}
+
 export interface DashboardData {
   cards: {
     active: number;
@@ -120,6 +136,7 @@ export interface DashboardData {
   completionAvg: number;
   monthly: { label: string; registrations: number; cases: number }[];
   recent: Registration[];
+  latestReportImport: ReportImport | null;
 }
 
 export interface PrintPayload {

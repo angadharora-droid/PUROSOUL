@@ -2,6 +2,7 @@ import XLSX from 'xlsx';
 import crypto from 'crypto';
 import Dispatch from '../models/Dispatch.js';
 import SchemeRegistration from '../models/SchemeRegistration.js';
+import ReportImport from '../models/ReportImport.js';
 import User from '../models/User.js';
 import { addDispatch } from './dispatch.service.js';
 import { expireOverdue } from './registration.service.js';
@@ -135,7 +136,10 @@ async function ensureImportUser() {
  * invoice date. Rows for parties without a scheme are counted, not errors —
  * the vendor report covers all customers, not just scheme members.
  */
-export async function importDispatchWorkbook(buffer, { filename = 'sales-report.xlsx' } = {}) {
+export async function importDispatchWorkbook(
+  buffer,
+  { filename = 'sales-report.xlsx', emailDate = null, emailSubject = '' } = {}
+) {
   const rows = parseSalesWorkbook(buffer);
   const summary = {
     file: filename,
@@ -145,7 +149,7 @@ export async function importDispatchWorkbook(buffer, { filename = 'sales-report.
     unmatchedParties: new Set(),
     skipped: [],
   };
-  if (!rows.length) return finishSummary(summary);
+  if (!rows.length) return finishSummary(summary, { filename, emailDate, emailSubject });
 
   await expireOverdue();
   const user = await ensureImportUser();
@@ -217,9 +221,33 @@ export async function importDispatchWorkbook(buffer, { filename = 'sales-report.
     }
   }
 
-  return finishSummary(summary);
+  return finishSummary(summary, { filename, emailDate, emailSubject });
 }
 
-function finishSummary(summary) {
-  return { ...summary, unmatchedParties: [...summary.unmatchedParties].sort() };
+/**
+ * Flattens the summary and records the run in the ReportImport collection —
+ * the dashboard reads the latest record, and the email job resumes from the
+ * newest emailDate. Recording is best-effort: a failure never undoes the
+ * dispatches that were already imported.
+ */
+async function finishSummary(summary, { filename, emailDate, emailSubject }) {
+  const result = { ...summary, unmatchedParties: [...summary.unmatchedParties].sort() };
+  try {
+    await ReportImport.create({
+      source: emailDate ? 'EMAIL' : 'FILE',
+      emailDate: emailDate || undefined,
+      emailSubject: emailSubject || undefined,
+      filename,
+      invoicesInFile: result.totalInvoices,
+      dispatchesCreated: result.created.length,
+      casesAdded: result.created.reduce((s, c) => s + (c.cases || 0), 0),
+      duplicates: result.duplicates,
+      unmatchedParties: result.unmatchedParties.length,
+      skipped: result.skipped.length,
+      created: result.created.slice(0, 100),
+    });
+  } catch (err) {
+    console.error('Failed to record report import:', err.message);
+  }
+  return result;
 }

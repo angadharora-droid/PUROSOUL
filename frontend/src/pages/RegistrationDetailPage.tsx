@@ -11,13 +11,11 @@ import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import { StatusBadge, BooleanBadge } from '@/components/ui/Badge';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Modal } from '@/components/ui/Modal';
-import DispatchForm from '@/components/registration/DispatchForm';
 import Timeline from '@/components/registration/Timeline';
 import { fetchRegistration, fetchTimeline } from '@/api/registrations';
 import { fetchDispatches } from '@/api/dispatches';
 import { fileUrl } from '@/lib/api';
 import { formatCurrency, formatDate, formatDateTime, formatNumber } from '@/lib/format';
-import { useAuth } from '@/context/AuthContext';
 import type { Dispatch } from '@/types';
 
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
@@ -32,7 +30,6 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
 export default function RegistrationDetailPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
-  const { hasRole } = useAuth();
   const [screenshotOpen, setScreenshotOpen] = useState(false);
 
   const { data: registration, isLoading } = useQuery({
@@ -56,9 +53,6 @@ export default function RegistrationDetailPage() {
       { accessorKey: 'dispatchDate', header: 'Date', cell: ({ getValue }) => formatDate(getValue<string>()) },
       { accessorKey: 'billNumber', header: 'Bill No.' },
       { accessorKey: 'vehicleNumber', header: 'Vehicle', cell: ({ getValue }) => getValue<string>() || '—' },
-      { accessorKey: 'cases250ml', header: '250 ml', cell: ({ getValue }) => formatNumber(getValue<number>()) },
-      { accessorKey: 'cases500ml', header: '500 ml', cell: ({ getValue }) => formatNumber(getValue<number>()) },
-      { accessorKey: 'cases1l', header: '1 L', cell: ({ getValue }) => formatNumber(getValue<number>()) },
       {
         accessorKey: 'totalCases',
         header: 'Total',
@@ -85,8 +79,6 @@ export default function RegistrationDetailPage() {
   }
 
   const { progress, schemeSnapshot: snap } = registration;
-  const canDispatch =
-    hasRole('sales', 'admin') && ['ACTIVE', 'COMPLETED'].includes(registration.status);
   const screenshot = fileUrl(registration.screenshotUrl);
   const isPdf = registration.screenshotUrl?.toLowerCase().endsWith('.pdf');
 
@@ -160,21 +152,9 @@ export default function RegistrationDetailPage() {
               data={dispatches}
               isLoading={dispatchesLoading}
               emptyTitle="No dispatches yet"
-              emptyDescription="Add the first dispatch entry below."
+              emptyDescription="Dispatches are imported automatically from the daily sales report email."
             />
           </Card>
-
-          {canDispatch && (
-            <Card>
-              <CardHeader
-                title="Add Dispatch Entry"
-                description="Record a new trip. Total cases are calculated automatically."
-              />
-              <CardBody>
-                <DispatchForm registration={registration} />
-              </CardBody>
-            </Card>
-          )}
         </div>
 
         <div className="space-y-6">
@@ -231,9 +211,9 @@ export default function RegistrationDetailPage() {
         {screenshot && <img src={screenshot} alt="Payment screenshot" className="mx-auto max-h-[70vh] rounded-lg" />}
       </Modal>
 
-      {!canDispatch && registration.status === 'ACTIVE' && (
+      {registration.status === 'ACTIVE' && (
         <p className="mt-6 flex items-center gap-2 text-sm text-gray-400">
-          <Truck className="h-4 w-4" /> Dispatch entries are added by the sales team.
+          <Truck className="h-4 w-4" /> Dispatches are imported automatically from the daily sales report email.
         </p>
       )}
     </div>

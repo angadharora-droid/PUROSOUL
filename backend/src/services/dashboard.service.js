@@ -1,5 +1,6 @@
 import SchemeRegistration from '../models/SchemeRegistration.js';
 import Dispatch from '../models/Dispatch.js';
+import ReportImport from '../models/ReportImport.js';
 import { startOfDay } from '../utils/helpers.js';
 import { expireOverdue, decorate } from './registration.service.js';
 
@@ -28,8 +29,17 @@ export async function getDashboard() {
 
   const in7Days = new Date(Date.now() + 7 * 86400000);
 
-  const [statusCounts, expiringSoon, todayDispatch, benefitAgg, monthlyRegs, monthlyDispatch, completionAgg, recent] =
-    await Promise.all([
+  const [
+    statusCounts,
+    expiringSoon,
+    todayDispatch,
+    benefitAgg,
+    monthlyRegs,
+    monthlyDispatch,
+    completionAgg,
+    recent,
+    latestReportImport,
+  ] = await Promise.all([
       SchemeRegistration.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }]),
       SchemeRegistration.countDocuments({ status: 'ACTIVE', expiryDate: { $lte: in7Days } }),
       Dispatch.aggregate([
@@ -79,6 +89,7 @@ export async function getDashboard() {
         { $group: { _id: null, avg: { $avg: '$pct' } } },
       ]),
       SchemeRegistration.find().sort('-createdAt').limit(6).populate('scheme', 'name'),
+      ReportImport.findOne().sort('-createdAt').lean(),
     ]);
 
   const byStatus = Object.fromEntries(statusCounts.map((s) => [s._id, s.count]));
@@ -102,5 +113,6 @@ export async function getDashboard() {
     completionAvg: Math.round((completionAgg[0]?.avg || 0) * 10) / 10,
     monthly,
     recent: recent.map(decorate),
+    latestReportImport,
   };
 }

@@ -7,6 +7,9 @@ import {
   CalendarX2,
   Truck,
   IndianRupee,
+  MailCheck,
+  MailQuestion,
+  MailX,
 } from 'lucide-react';
 import {
   Bar,
@@ -26,6 +29,7 @@ import EmptyState from '@/components/ui/EmptyState';
 import { fetchDashboard } from '@/api/dashboard';
 import { useTheme } from '@/context/ThemeContext';
 import { formatCurrency, formatDate, formatNumber } from '@/lib/format';
+import type { ReportImport } from '@/types';
 
 /* Chart colors validated (dataviz six-checks) per surface: light on #fff, dark on #111827. */
 const CHART_COLORS = {
@@ -72,6 +76,72 @@ function StatCard({ label, value, sub, icon: Icon, iconClass, to }: StatCardProp
         </span>
       </div>
     </button>
+  );
+}
+
+/** Status of the daily sales-report email: received & imported today, still awaited, or Sunday. */
+function ReportEmailCard({ latest }: { latest: ReportImport | null }) {
+  const now = new Date();
+  const isSunday = now.getDay() === 0;
+  const receivedAt = latest ? new Date(latest.emailDate ?? latest.createdAt) : null;
+  const receivedToday = !!receivedAt && receivedAt.toDateString() === now.toDateString();
+
+  const time = receivedAt?.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+  const reportName = latest?.emailSubject || latest?.filename || 'Sales report';
+
+  let Icon = MailQuestion;
+  let iconClass = 'bg-amber-100 text-amber-600 dark:bg-amber-500/10';
+  let headline = 'Not received yet';
+  let subline = 'The mailbox is checked hourly between 9 AM and 4 PM.';
+
+  if (receivedToday && latest) {
+    Icon = MailCheck;
+    iconClass = 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/10';
+    headline =
+      latest.dispatchesCreated > 0
+        ? `Imported ${formatNumber(latest.dispatchesCreated)} dispatch${latest.dispatchesCreated === 1 ? '' : 'es'} · ${formatNumber(latest.casesAdded)} cases`
+        : 'Received — no new dispatches (all invoices already recorded)';
+    subline = `${reportName} · received ${time}`;
+  } else if (isSunday) {
+    Icon = MailX;
+    iconClass = 'bg-gray-200 text-gray-600 dark:bg-gray-500/10 dark:text-gray-300';
+    headline = 'No report expected today (Sunday)';
+    subline = latest ? `Last report: ${formatDate(receivedAt)} · ${reportName}` : 'No report imported yet.';
+  } else if (latest) {
+    subline = `Last report: ${formatDate(receivedAt)} · ${reportName} · ${subline}`;
+  }
+
+  return (
+    <Card className="mt-4">
+      <CardBody>
+        <div className="flex flex-wrap items-center gap-4">
+          <span className={`rounded-xl p-2.5 ${iconClass}`}>
+            <Icon className="h-5 w-5" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm text-gray-500 dark:text-gray-400">Today's Sales Report Email</p>
+            <p className="font-semibold text-gray-900 dark:text-white">{headline}</p>
+            <p className="mt-0.5 truncate text-xs text-gray-400">{subline}</p>
+          </div>
+          {receivedToday && latest && (
+            <div className="flex gap-6 text-right text-sm">
+              <div>
+                <p className="text-xs text-gray-400">Already recorded</p>
+                <p className="font-semibold text-gray-900 dark:text-white">{formatNumber(latest.duplicates)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400">No scheme</p>
+                <p className="font-semibold text-gray-900 dark:text-white">{formatNumber(latest.unmatchedParties)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-gray-400">Skipped</p>
+                <p className="font-semibold text-gray-900 dark:text-white">{formatNumber(latest.skipped)}</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </CardBody>
+    </Card>
   );
 }
 
@@ -143,7 +213,7 @@ export default function DashboardPage() {
     );
   }
 
-  const { cards, monthly, completionAvg, recent } = data;
+  const { cards, monthly, completionAvg, recent, latestReportImport } = data;
 
   const axisProps = {
     tickLine: false,
@@ -201,6 +271,9 @@ export default function DashboardPage() {
           iconClass="bg-emerald-100 text-emerald-600 dark:bg-emerald-500/10"
         />
       </div>
+
+      {/* Daily sales-report email status */}
+      <ReportEmailCard latest={latestReportImport} />
 
       {/* Charts */}
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
