@@ -25,16 +25,20 @@ const env = {
     from: process.env.MAIL_FROM || 'Scheme Tracker <no-reply@company.com>',
   },
   accountsEmail: process.env.ACCOUNTS_EMAIL || '',
-  // Mailbox the vendor's daily sales report arrives in (read via IMAP by
-  // src/jobs/fetchDispatchEmail.js).
+  // Mailbox the vendor's daily sales report arrives in (read over IMAP).
+  // Host, user and password carry no defaults on purpose — they must come
+  // from the environment; auto-import stays off until all three are set.
   reportMail: {
-    host: process.env.REPORT_IMAP_HOST || 'imap.rediffmailpro.com',
+    host: process.env.REPORT_IMAP_HOST || '',
     port: Number(process.env.REPORT_IMAP_PORT) || 993,
-    user: process.env.REPORT_EMAIL_USER || 'report@cpgh.in',
+    user: process.env.REPORT_EMAIL_USER || '',
     pass: process.env.REPORT_EMAIL_PASSWORD || '',
     // How far back the first run searches for report emails (later runs resume
     // from the last processed email instead).
     lookbackDays: Number(process.env.REPORT_LOOKBACK_DAYS) || 45,
+    // The web server checks the mailbox automatically while it runs;
+    // set REPORT_AUTO_FETCH=false to turn that off.
+    autoFetch: process.env.REPORT_AUTO_FETCH !== 'false',
   },
 };
 

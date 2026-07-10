@@ -71,10 +71,10 @@ MAIL_FROM="Puro Soul Scheme Tracker <you@yourdomain.com>"
 ACCOUNTS_EMAIL=
 
 # Mailbox the vendor's daily sales report (AFVPL Tally export) arrives in —
-# read over IMAP by the dispatch auto-import job
-REPORT_IMAP_HOST=imap.rediffmailpro.com
+# auto-import stays OFF until host, user and password are all set
+REPORT_IMAP_HOST=
 REPORT_IMAP_PORT=993
-REPORT_EMAIL_USER=report@cpgh.in
+REPORT_EMAIL_USER=
 REPORT_EMAIL_PASSWORD=
 # How far back the FIRST run searches for report emails (backfills history);
 # later runs resume from the last processed email automatically
@@ -113,23 +113,15 @@ An employee mails the **AFVPL daily sales report** (Tally "Ledger Account" expor
 
 Missed days heal themselves: the workbook is cumulative, so when the employee is on holiday or forgets to send it, the next email they do send contains all the missed invoices and the job catches up in one go — without ever double-counting.
 
-Run it manually anytime — re-runs never duplicate:
+**Scheduling is built into the web server** — no cron or Task Scheduler needed. While the backend runs (e.g. on Railway), it checks the mailbox once at startup (catch-up after downtime) and then every 30 minutes between 9 AM and 5 PM IST, Monday–Saturday (the report has no fixed send time, usually 9 AM–2 PM). Just set `REPORT_EMAIL_PASSWORD`; set `REPORT_AUTO_FETCH=false` to turn the scheduler off. Every check is logged (`[report-fetch] ...`), visible in Railway's deploy logs.
+
+You can also run a check manually anytime — re-runs never duplicate:
 
 ```bash
 cd backend
-npm run import:dispatch-email                      # fetch from the mailbox
+npm run import:dispatch-email                        # check the mailbox now
 npm run import:dispatch-email -- --file report.xlsx  # import a file on disk
 ```
-
-The report has no fixed send time (usually between 9 AM and 2 PM), so schedule the job to check **hourly from 9 AM to 4 PM, Monday–Saturday** — runs that find no new mail exit in seconds, and the state file guarantees each email is only imported once (run from an elevated prompt, adjust the path):
-
-```bat
-schtasks /Create /TN "Purosoul Dispatch Import" /SC WEEKLY /D MON,TUE,WED,THU,FRI,SAT ^
-  /ST 09:00 /RI 60 /DU 0007:00 ^
-  /TR "cmd /c cd /d C:\path\to\purosoul\backend && npm run import:dispatch-email"
-```
-
-(`/RI 60 /DU 0007:00` = repeat every 60 minutes for 7 hours, i.e. 9:00–16:00. A report that arrives even later is simply picked up by the next day's first run — nothing is lost.)
 
 ## Business Rules Implemented
 
