@@ -8,12 +8,12 @@
  * dispatch history (see dispatchImport.service.js).
  *
  * Missed days heal themselves: the workbook is cumulative (each mail re-sends
- * the whole month), the job remembers the last processed email in
- * data/dispatch-import-state.json and catches up on everything newer — so an
- * employee holiday, a forgotten mail or the machine being off only delays the
- * import, never loses it. The first run looks back REPORT_LOOKBACK_DAYS
- * (default 45) to backfill history. Vouchers already recorded are skipped, so
- * re-processing is always safe.
+ * the whole month), every processed email is recorded in the ReportImport
+ * collection (which also powers the dashboard card) and the job catches up on
+ * everything newer than the last record — so an employee holiday, a forgotten
+ * mail or the machine being off only delays the import, never loses it. The
+ * first run looks back REPORT_LOOKBACK_DAYS (default 45) to backfill history.
+ * Vouchers already recorded are skipped, so re-processing is always safe.
  *
  * Schedule via Windows Task Scheduler to check hourly 9 AM–4 PM, Mon–Sat
  * (see README — runs that find no new mail exit in seconds):
@@ -29,12 +29,11 @@ import { ImapFlow } from 'imapflow';
 import { simpleParser } from 'mailparser';
 import { connectDB } from '../config/db.js';
 import env from '../config/env.js';
+import ReportImport from '../models/ReportImport.js';
 import { importDispatchWorkbook } from '../services/dispatchImport.service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = path.resolve(__dirname, '../../data');
-const ATTACHMENT_DIR = path.join(DATA_DIR, 'attachments');
-const STATE_FILE = path.join(DATA_DIR, 'dispatch-import-state.json');
+const ATTACHMENT_DIR = path.resolve(__dirname, '../../data/attachments');
 
 const SPREADSHEET_EXT = /\.(xlsx|xls|csv)$/i;
 const DAY_MS = 86400000;
@@ -70,19 +69,6 @@ function collectAttachmentNames(node, names = []) {
   return names;
 }
 
-function readState() {
-  try {
-    return JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-  } catch {
-    return null;
-  }
-}
-
-function writeState(state) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
-}
-
 /**
  * Every matching report email newer than the last processed one, oldest first.
  * Headers and attachment names are checked before downloading, so only real
@@ -92,12 +78,12 @@ async function fetchUnprocessedReportEmails() {
   const { host, port, user, pass, lookbackDays } = env.reportMail;
   if (!pass) throw new Error('REPORT_EMAIL_PASSWORD is not set');
 
-  const state = readState();
+  // Resume from the newest processed email recorded in the database.
+  const lastImport = await ReportImport.findOne({ source: 'EMAIL' }).sort('-emailDate').lean();
+  const lastEmailDate = lastImport?.emailDate ? new Date(lastImport.emailDate).getTime() : null;
   // Overlap the last processed day to survive clock differences; the voucher
   // dedup makes re-processing harmless.
-  const sinceMs = state?.lastEmailDate
-    ? state.lastEmailDate - DAY_MS
-    : Date.now() - lookbackDays * DAY_MS;
+  const sinceMs = lastEmailDate ? lastEmailDate - DAY_MS : Date.now() - lookbackDays * DAY_MS;
 
   const client = new ImapFlow({ host, port, secure: true, auth: { user, pass }, logger: false });
   await client.connect();
@@ -122,7 +108,7 @@ async function fetchUnprocessedReportEmails() {
     for await (const msg of client.fetch(candidates, { source: true })) {
       const parsed = await simpleParser(msg.source);
       if (!matchesSalesReport(describeParsed(parsed)) || !pickAttachment(parsed)) continue;
-      if (state?.lastEmailDate && (parsed.date?.getTime() || 0) <= state.lastEmailDate) continue;
+      if (lastEmailDate && (parsed.date?.getTime() || 0) <= lastEmailDate) continue;
       reports.push(parsed);
     }
     return reports.sort((a, b) => (a.date?.getTime() || 0) - (b.date?.getTime() || 0));
@@ -183,18 +169,14 @@ async function main() {
     console.log(`\n— "${parsed.subject}" (${parsed.date?.toLocaleString('en-IN') || 'no date'})`);
     console.log(`  Attachment saved to ${savedTo}`);
 
+    // The import records each run in ReportImport, so a crash mid-catch-up
+    // resumes from the right email instead of starting over.
     const summary = await importDispatchWorkbook(attachment.content, {
       filename: attachment.filename || 'sales-report.xlsx',
+      emailDate: parsed.date || new Date(),
+      emailSubject: parsed.subject || '',
     });
     printSummary(summary);
-
-    // Remember progress after each email so a crash mid-catch-up resumes
-    // from the right place instead of starting over.
-    writeState({
-      lastEmailDate: parsed.date?.getTime() || Date.now(),
-      lastEmailSubject: parsed.subject || '',
-      processedAt: new Date().toISOString(),
-    });
   }
 }
 
