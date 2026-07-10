@@ -1,6 +1,7 @@
 import app from './app.js';
 import env from './config/env.js';
 import { connectDB } from './config/db.js';
+import { startDispatchEmailScheduler } from './services/dispatchEmailFetch.service.js';
 
 async function start() {
   try {
@@ -8,6 +9,9 @@ async function start() {
     const server = app.listen(env.port, () => {
       console.log(`API listening on port ${env.port} (${env.nodeEnv})`);
     });
+
+    // Sales-report auto-import: checks the report mailbox while the server runs.
+    startDispatchEmailScheduler();
 
     server.on('error', (err) => {
       if (err.code === 'EADDRINUSE') {
