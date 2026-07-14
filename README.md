@@ -144,6 +144,7 @@ npm run import:dispatch-email -- --file report.xlsx  # import a file on disk
 | POST   | `/registrations` | sales, admin | Create registration (multipart, `screenshot` field) |
 | GET    | `/registrations` | authed | Search/filter/paginate (`q, bill, status, scheme, from, to, page, limit`) |
 | GET    | `/registrations/:id` · `/registrations/:id/timeline` | authed | Detail + audit timeline |
+| PATCH  | `/registrations/:id/screenshot` | sales, admin | Replace payment screenshot (multipart, `screenshot` field, audited) |
 | GET/PUT | `/settings/emails` | admin | Manage validation email recipients |
 | POST   | `/dispatch` (alias `/dispatches`) | sales, admin | Add dispatch entry |
 | GET    | `/dispatch/:registrationId` | authed | Dispatch history |
@@ -154,5 +155,5 @@ npm run import:dispatch-email -- --file report.xlsx  # import a file on disk
 ## Production Notes
 
 - `frontend`: `npm run build` outputs a static `dist/` (React/charts/table vendors split into separate chunks). Set `VITE_API_URL` to the deployed API base and serve `dist/` from any static host; the backend `CLIENT_URL` env must match the frontend origin for CORS.
-- `backend`: set a strong `JWT_SECRET`, real `MONGODB_URI`, and SMTP credentials. Uploads are stored on disk under `backend/uploads` — mount a persistent volume (or swap the Multer storage for S3) in production.
+- `backend`: set a strong `JWT_SECRET`, real `MONGODB_URI`, and SMTP credentials. Uploads are stored on disk (`UPLOAD_DIR`, default `backend/uploads`) — **without a persistent volume every redeploy wipes them** and payment screenshots show as broken images. On Railway: service → **Settings → Volumes → Add Volume**, mount path `/data`, then set the env var `UPLOAD_DIR=/data/uploads` and redeploy. The deploy log prints `[uploads] serving payment screenshots from …` so you can confirm the volume path took effect. Screenshots lost before the volume existed can be restored per registration via the **Replace screenshot** button on the registration detail page (`PATCH /registrations/:id/screenshot`).
 - Security middleware included: helmet, CORS allow-list, JWT expiry, role-based authorization on every route, request validation on every write, and centralized error handling (Mongoose/Multer/duplicate-key errors mapped to proper status codes).

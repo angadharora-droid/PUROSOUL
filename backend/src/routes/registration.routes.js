@@ -17,6 +17,12 @@ router.post(
   validate,
   registrationController.create
 );
+router.patch(
+  '/:id/screenshot',
+  authorize('sales', 'admin'),
+  upload.single('screenshot'),
+  registrationController.updateScreenshot
+);
 router.get('/', registrationController.list);
 router.get('/:id', registrationController.getOne);
 router.get('/:id/timeline', registrationController.timeline);

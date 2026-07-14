@@ -5,7 +5,7 @@ import crypto from 'crypto';
 import env from '../config/env.js';
 import ApiError from '../utils/ApiError.js';
 
-const uploadDir = path.resolve(env.uploadDir);
+const uploadDir = env.uploadDir; // already absolute (resolved in config/env.js)
 fs.mkdirSync(uploadDir, { recursive: true });
 
 const storage = multer.diskStorage({
