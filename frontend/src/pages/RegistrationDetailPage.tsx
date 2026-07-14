@@ -71,6 +71,18 @@ export default function RegistrationDetailPage() {
     queryFn: () => fetchTimeline(id),
   });
 
+  const screenshot = fileUrl(registration?.screenshotUrl);
+  const isPdf = registration?.screenshotUrl?.toLowerCase().endsWith('.pdf');
+
+  // The file can vanish when the server redeploys without a persistent disk —
+  // re-upload is offered only when it is actually gone.
+  const { data: fileMissing = false } = useQuery({
+    queryKey: ['screenshot-exists', registration?.screenshotUrl],
+    queryFn: async () => !(await fetch(screenshot as string, { method: 'HEAD' })).ok,
+    enabled: Boolean(screenshot),
+  });
+  const screenshotLost = fileMissing || screenshotMissing;
+
   const dispatchColumns = useMemo<ColumnDef<Dispatch, any>[]>(
     () => [
       { accessorKey: 'dispatchDate', header: 'Date', cell: ({ getValue }) => formatDate(getValue<string>()) },
@@ -100,8 +112,6 @@ export default function RegistrationDetailPage() {
   }
 
   const { progress, schemeSnapshot: snap } = registration;
-  const screenshot = fileUrl(registration.screenshotUrl);
-  const isPdf = registration.screenshotUrl?.toLowerCase().endsWith('.pdf');
 
   return (
     <div>
@@ -205,30 +215,32 @@ export default function RegistrationDetailPage() {
               </dl>
               {screenshot && (
                 <button
-                  onClick={() => (isPdf ? window.open(screenshot, '_blank') : setScreenshotOpen(true))}
+                  onClick={() =>
+                    isPdf && !screenshotLost ? window.open(screenshot, '_blank') : setScreenshotOpen(true)
+                  }
                   className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 py-2.5 text-sm font-medium text-primary-600 transition hover:border-primary-400 hover:bg-primary-50 dark:border-gray-700 dark:hover:bg-primary-900/20"
                 >
                   <ExternalLink className="h-4 w-4" /> View Payment Screenshot
                 </button>
               )}
               {hasRole('sales', 'admin') && (
-                <>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp,application/pdf"
-                    onChange={onFilePicked}
-                    className="hidden"
-                  />
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={replaceMutation.isPending}
-                    className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg py-2 text-xs font-medium text-gray-400 transition hover:text-primary-600 disabled:opacity-60 dark:text-gray-500 dark:hover:text-primary-400"
-                  >
-                    <ImagePlus className="h-3.5 w-3.5" />
-                    {replaceMutation.isPending ? 'Uploading…' : 'Replace screenshot'}
-                  </button>
-                </>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,application/pdf"
+                  onChange={onFilePicked}
+                  className="hidden"
+                />
+              )}
+              {hasRole('sales', 'admin') && screenshotLost && (
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={replaceMutation.isPending}
+                  className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg py-2 text-xs font-medium text-amber-600 transition hover:text-amber-700 disabled:opacity-60 dark:text-amber-400 dark:hover:text-amber-300"
+                >
+                  <ImagePlus className="h-3.5 w-3.5" />
+                  {replaceMutation.isPending ? 'Uploading…' : 'Screenshot file lost — re-upload'}
+                </button>
               )}
               {registration.remarks && (
                 <p className="mt-3 rounded-lg bg-gray-50 p-3 text-sm text-gray-600 dark:bg-gray-800 dark:text-gray-300">
@@ -248,7 +260,7 @@ export default function RegistrationDetailPage() {
       </div>
 
       <Modal open={screenshotOpen} onClose={() => setScreenshotOpen(false)} title="Payment Screenshot" size="lg">
-        {screenshot && !screenshotMissing ? (
+        {screenshot && !screenshotLost ? (
           <img
             src={screenshot}
             alt="Payment screenshot"
