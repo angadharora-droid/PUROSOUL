@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMemo, useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Printer, Truck, ExternalLink, CalendarClock } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { Printer, Truck, ExternalLink, CalendarClock, ImageOff, ImagePlus } from 'lucide-react';
 import type { ColumnDef } from '@tanstack/react-table';
 import PageHeader from '@/components/ui/PageHeader';
 import Button from '@/components/ui/Button';
@@ -12,9 +13,10 @@ import { StatusBadge, BooleanBadge } from '@/components/ui/Badge';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Modal } from '@/components/ui/Modal';
 import Timeline from '@/components/registration/Timeline';
-import { fetchRegistration, fetchTimeline } from '@/api/registrations';
+import { fetchRegistration, fetchTimeline, updateScreenshot } from '@/api/registrations';
 import { fetchDispatches } from '@/api/dispatches';
-import { fileUrl } from '@/lib/api';
+import { fileUrl, getApiErrorMessage } from '@/lib/api';
+import { useAuth } from '@/context/AuthContext';
 import { formatCurrency, formatDate, formatDateTime, formatNumber } from '@/lib/format';
 import type { Dispatch } from '@/types';
 
@@ -30,7 +32,28 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
 export default function RegistrationDetailPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { hasRole } = useAuth();
   const [screenshotOpen, setScreenshotOpen] = useState(false);
+  const [screenshotMissing, setScreenshotMissing] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const replaceMutation = useMutation({
+    mutationFn: (file: File) => updateScreenshot(id, file),
+    onSuccess: () => {
+      toast.success('Payment screenshot updated');
+      setScreenshotMissing(false);
+      queryClient.invalidateQueries({ queryKey: ['registration', id] });
+      queryClient.invalidateQueries({ queryKey: ['timeline', id] });
+    },
+    onError: (err) => toast.error(getApiErrorMessage(err)),
+  });
+
+  const onFilePicked = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) replaceMutation.mutate(file);
+    e.target.value = ''; // allow picking the same file again
+  };
 
   const { data: registration, isLoading } = useQuery({
     queryKey: ['registration', id],
@@ -188,6 +211,25 @@ export default function RegistrationDetailPage() {
                   <ExternalLink className="h-4 w-4" /> View Payment Screenshot
                 </button>
               )}
+              {hasRole('sales', 'admin') && (
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,application/pdf"
+                    onChange={onFilePicked}
+                    className="hidden"
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={replaceMutation.isPending}
+                    className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg py-2 text-xs font-medium text-gray-400 transition hover:text-primary-600 disabled:opacity-60 dark:text-gray-500 dark:hover:text-primary-400"
+                  >
+                    <ImagePlus className="h-3.5 w-3.5" />
+                    {replaceMutation.isPending ? 'Uploading…' : 'Replace screenshot'}
+                  </button>
+                </>
+              )}
               {registration.remarks && (
                 <p className="mt-3 rounded-lg bg-gray-50 p-3 text-sm text-gray-600 dark:bg-gray-800 dark:text-gray-300">
                   {registration.remarks}
@@ -206,7 +248,34 @@ export default function RegistrationDetailPage() {
       </div>
 
       <Modal open={screenshotOpen} onClose={() => setScreenshotOpen(false)} title="Payment Screenshot" size="lg">
-        {screenshot && <img src={screenshot} alt="Payment screenshot" className="mx-auto max-h-[70vh] rounded-lg" />}
+        {screenshot && !screenshotMissing ? (
+          <img
+            src={screenshot}
+            alt="Payment screenshot"
+            className="mx-auto max-h-[70vh] rounded-lg"
+            onError={() => setScreenshotMissing(true)}
+          />
+        ) : (
+          <div className="flex flex-col items-center gap-3 py-10 text-center">
+            <ImageOff className="h-10 w-10 text-gray-300 dark:text-gray-600" />
+            <div>
+              <p className="font-medium text-gray-900 dark:text-white">Screenshot file is missing on the server</p>
+              <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                It was likely lost during a server redeploy. Upload it again to restore it.
+              </p>
+            </div>
+            {hasRole('sales', 'admin') && (
+              <Button
+                variant="secondary"
+                size="sm"
+                loading={replaceMutation.isPending}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <ImagePlus className="h-4 w-4" /> Re-upload screenshot
+              </Button>
+            )}
+          </div>
+        )}
       </Modal>
 
       {registration.status === 'ACTIVE' && (

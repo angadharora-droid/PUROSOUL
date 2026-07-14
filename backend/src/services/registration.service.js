@@ -1,6 +1,9 @@
+import fs from 'fs';
+import path from 'path';
 import SchemeRegistration from '../models/SchemeRegistration.js';
 import Scheme from '../models/Scheme.js';
 import Dispatch from '../models/Dispatch.js';
+import env from '../config/env.js';
 import ApiError from '../utils/ApiError.js';
 import { addDays, endOfDay, escapeRegex, startOfDay } from '../utils/helpers.js';
 import { logAudit, getRegistrationTimeline } from './audit.service.js';
@@ -143,6 +146,36 @@ async function notifyValidationEmail(registration, user) {
   } catch (err) {
     console.error('Registration email failed:', err.message);
   }
+}
+
+/**
+ * Replaces the payment screenshot on an existing registration — used to restore
+ * attachments whose files were lost (e.g. a redeploy wiped a non-persistent disk).
+ */
+export async function replaceScreenshot({ id, file, user }) {
+  if (!file) throw new ApiError(422, 'A payment screenshot/attachment is required');
+
+  const registration = await SchemeRegistration.findById(id);
+  if (!registration) throw new ApiError(404, 'Registration not found');
+
+  const previousUrl = registration.screenshotUrl;
+  registration.screenshotUrl = `/uploads/${file.filename}`;
+  await registration.save();
+
+  // Best-effort cleanup of the replaced file; it may already be gone.
+  if (previousUrl?.startsWith('/uploads/')) {
+    const oldPath = path.join(env.uploadDir, path.basename(previousUrl));
+    fs.promises.unlink(oldPath).catch(() => {});
+  }
+
+  await logAudit({
+    action: 'SCREENSHOT_UPDATED',
+    user,
+    registration: registration._id,
+    message: `Payment screenshot re-uploaded for "${registration.partyName}"`,
+  });
+
+  return decorate(registration);
 }
 
 export async function listRegistrations(query) {

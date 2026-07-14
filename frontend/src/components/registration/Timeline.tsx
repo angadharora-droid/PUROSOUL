@@ -1,5 +1,6 @@
 import {
   FilePlus2,
+  ImagePlus,
   MailCheck,
   Truck,
   Trophy,
@@ -12,6 +13,7 @@ import type { AuditLog } from '@/types';
 
 const ACTION_ICONS: Record<string, { icon: typeof CircleDot; className: string }> = {
   REGISTRATION_CREATED: { icon: FilePlus2, className: 'bg-primary-100 text-primary-600 dark:bg-primary-900/40' },
+  SCREENSHOT_UPDATED: { icon: ImagePlus, className: 'bg-violet-100 text-violet-600 dark:bg-violet-500/10' },
   VALIDATION_EMAIL_SENT: { icon: MailCheck, className: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/10' },
   DISPATCH_ADDED: { icon: Truck, className: 'bg-blue-100 text-blue-600 dark:bg-blue-500/10' },
   REGISTRATION_COMPLETED: { icon: Trophy, className: 'bg-amber-100 text-amber-600 dark:bg-amber-500/10' },

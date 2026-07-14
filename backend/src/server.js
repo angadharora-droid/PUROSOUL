@@ -8,6 +8,7 @@ async function start() {
     await connectDB();
     const server = app.listen(env.port, () => {
       console.log(`API listening on port ${env.port} (${env.nodeEnv})`);
+      console.log(`[uploads] serving payment screenshots from ${env.uploadDir}`);
     });
 
     // Sales-report auto-import: checks the report mailbox while the server runs.

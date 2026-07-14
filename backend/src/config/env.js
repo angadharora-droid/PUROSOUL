@@ -1,6 +1,14 @@
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 dotenv.config();
+
+// Backend package root (…/backend). A relative UPLOAD_DIR resolves against this —
+// not the process CWD — so uploads land in the same place no matter where the
+// server is started from. Absolute paths (e.g. a mounted volume like
+// /data/uploads on Railway) are used as-is.
+const backendRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 const env = {
   nodeEnv: process.env.NODE_ENV || 'development',
@@ -16,7 +24,7 @@ const env = {
     secret: process.env.JWT_SECRET || 'dev-only-secret-change-me',
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
   },
-  uploadDir: process.env.UPLOAD_DIR || 'uploads',
+  uploadDir: path.resolve(backendRoot, process.env.UPLOAD_DIR || 'uploads'),
   smtp: {
     host: process.env.SMTP_HOST || '',
     port: Number(process.env.SMTP_PORT) || 587,

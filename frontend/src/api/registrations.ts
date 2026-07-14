@@ -21,6 +21,15 @@ export async function createRegistration(formData: FormData) {
   return res.data.data as Registration;
 }
 
+export async function updateScreenshot(id: string, file: File) {
+  const formData = new FormData();
+  formData.append('screenshot', file);
+  const res = await api.patch(`/registrations/${id}/screenshot`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return res.data.data as Registration;
+}
+
 export async function fetchTimeline(id: string) {
   const res = await api.get(`/registrations/${id}/timeline`);
   return res.data.data as AuditLog[];

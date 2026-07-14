@@ -15,6 +15,15 @@ export const create = asyncHandler(async (req, res) => {
   });
 });
 
+export const updateScreenshot = asyncHandler(async (req, res) => {
+  const registration = await registrationService.replaceScreenshot({
+    id: req.params.id,
+    file: req.file,
+    user: req.user,
+  });
+  res.json({ success: true, data: registration, message: 'Payment screenshot updated' });
+});
+
 export const list = asyncHandler(async (req, res) => {
   const result = await registrationService.listRegistrations(req.query);
   res.json({ success: true, data: result });

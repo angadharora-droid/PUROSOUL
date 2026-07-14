@@ -2,7 +2,6 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import path from 'path';
 import env from './config/env.js';
 import routes from './routes/index.js';
 import { notFound, errorHandler } from './middleware/error.js';
@@ -17,7 +16,7 @@ app.use(express.urlencoded({ extended: true }));
 if (env.nodeEnv === 'development') app.use(morgan('dev'));
 
 // Uploaded payment screenshots
-app.use('/uploads', express.static(path.resolve(env.uploadDir)));
+app.use('/uploads', express.static(env.uploadDir));
 
 app.get('/', (_req, res) =>
   res.json({
