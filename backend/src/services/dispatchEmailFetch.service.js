@@ -32,14 +32,25 @@ const DAY_MS = 86400000;
 const IST_OFFSET_MS = 5.5 * 3600000;
 const CHECK_INTERVAL_MS = 30 * 60000;
 
-/** Same identification rules as the Purosoul handler in fetchEmailReport.js. */
+/**
+ * Identifies the vendor's daily sales-report email.
+ *
+ * The gate is a spreadsheet attachment plus at least one soft signal — either
+ * the known vendor (name/brand tokens, matched loosely so a changed display
+ * name or sender address still counts) or a report-ish subject/filename. This
+ * is deliberately forgiving: the structural parser in dispatchImport.service.js
+ * only produces dispatches from the exact Tally "Date / Particulars / Voucher
+ * No. / Quantity" layout, so an unrelated spreadsheet slipping through imports
+ * nothing (a 0-row ReportImport), it can never corrupt the dispatch history.
+ */
 function matchesSalesReport({ subject, from, attachmentNames }) {
-  const looksLikeReport =
-    /daily sales|sales report/i.test(subject) || /AFVPL|purosoul/i.test(attachmentNames);
-  const fromKnownSender = /amarjit fiscal|afvpl|purosoul/i.test(
-    `${subject} ${from} ${attachmentNames}`
+  const haystack = `${subject} ${from} ${attachmentNames}`;
+  const hasSpreadsheet = /\.(xlsx|xls|csv)\b/i.test(attachmentNames);
+  const fromVendor = /amarjit|afvpl|purosoul|fiscal/i.test(haystack);
+  const reportKeyword = /daily sales|sales report|ledger|dispatch|invoice|report|sale/i.test(
+    `${subject} ${attachmentNames}`
   );
-  return looksLikeReport && fromKnownSender;
+  return hasSpreadsheet && (fromVendor || reportKeyword);
 }
 
 function describeParsed(parsed) {
