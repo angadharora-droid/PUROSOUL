@@ -27,6 +27,17 @@ const NON_PARTY_ROWS = new Set(['', 'NIL', 'GRAND TOTAL', 'TOTAL']);
 const MONTHS = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
 
 /**
+ * Case count from a quantity cell. Some monthly tabs export the unit alongside
+ * the number ("200 BOXES") instead of a bare numeric cell, so the leading
+ * number is read out of the text rather than relying on Number().
+ */
+function parseQuantityCell(value) {
+  if (typeof value === 'number') return Math.round(value);
+  const m = norm(value).match(/\d[\d,]*(\.\d+)?/);
+  return m ? Math.round(Number(m[0].replace(/,/g, ''))) : NaN;
+}
+
+/**
  * Parses a date cell into a local Date pinned to noon (safely inside the day,
  * regardless of timezone). Numeric cells are Excel serials — parsed with
  * XLSX.SSF so no timezone conversion is involved.
@@ -99,7 +110,7 @@ export function parseSalesWorkbook(buffer) {
       const voucherNo = normKey(row[col.voucher]);
       if (!voucherNo || /^-+$/.test(voucherNo)) continue;
 
-      const quantity = Math.round(Number(row[col.quantity]));
+      const quantity = parseQuantityCell(row[col.quantity]);
       if (!Number.isFinite(quantity) || quantity <= 0) continue;
 
       const date = parseDateCell(row[col.date]);
