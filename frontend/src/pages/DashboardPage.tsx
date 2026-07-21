@@ -1,5 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import {
   Activity,
   Hourglass,
@@ -10,6 +11,7 @@ import {
   MailCheck,
   MailQuestion,
   MailX,
+  RefreshCw,
 } from 'lucide-react';
 import {
   Bar,
@@ -26,8 +28,12 @@ import { CardSkeleton, Skeleton } from '@/components/ui/Skeleton';
 import { StatusBadge } from '@/components/ui/Badge';
 import ProgressBar from '@/components/ui/ProgressBar';
 import EmptyState from '@/components/ui/EmptyState';
+import Button from '@/components/ui/Button';
 import { fetchDashboard } from '@/api/dashboard';
+import { refreshReportImport } from '@/api/reports';
 import { useTheme } from '@/context/ThemeContext';
+import { useAuth } from '@/context/AuthContext';
+import { getApiErrorMessage } from '@/lib/api';
 import { formatCurrency, formatDate, formatNumber } from '@/lib/format';
 import type { ReportImport } from '@/types';
 
@@ -81,6 +87,17 @@ function StatCard({ label, value, sub, icon: Icon, iconClass, to }: StatCardProp
 
 /** Status of the daily sales-report email: received & imported today, still awaited, or Sunday. */
 function ReportEmailCard({ latest }: { latest: ReportImport | null }) {
+  const { hasRole } = useAuth();
+  const queryClient = useQueryClient();
+  const refresh = useMutation({
+    mutationFn: refreshReportImport,
+    onSuccess: ({ message }) => {
+      toast.success(message);
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+    onError: (err) => toast.error(getApiErrorMessage(err)),
+  });
+
   const now = new Date();
   const isSunday = now.getDay() === 0;
   const receivedAt = latest ? new Date(latest.emailDate ?? latest.createdAt) : null;
@@ -138,6 +155,19 @@ function ReportEmailCard({ latest }: { latest: ReportImport | null }) {
                 <p className="font-semibold text-gray-900 dark:text-white">{formatNumber(latest.skipped)}</p>
               </div>
             </div>
+          )}
+          {hasRole('sales', 'admin') && (
+            <Button
+              variant="outline"
+              size="sm"
+              loading={refresh.isPending}
+              onClick={() => refresh.mutate()}
+              className="shrink-0"
+              title="Fetch the latest sales report and re-import its Excel data now"
+            >
+              {!refresh.isPending && <RefreshCw className="h-4 w-4" aria-hidden />}
+              {refresh.isPending ? 'Fetching…' : 'Refresh'}
+            </Button>
           )}
         </div>
       </CardBody>
