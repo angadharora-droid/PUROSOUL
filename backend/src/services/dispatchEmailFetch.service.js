@@ -32,25 +32,14 @@ const DAY_MS = 86400000;
 const IST_OFFSET_MS = 5.5 * 3600000;
 const CHECK_INTERVAL_MS = 30 * 60000;
 
-/**
- * Identifies the vendor's daily sales-report email.
- *
- * The gate is a spreadsheet attachment plus at least one soft signal — either
- * the known vendor (name/brand tokens, matched loosely so a changed display
- * name or sender address still counts) or a report-ish subject/filename. This
- * is deliberately forgiving: the structural parser in dispatchImport.service.js
- * only produces dispatches from the exact Tally "Date / Particulars / Voucher
- * No. / Quantity" layout, so an unrelated spreadsheet slipping through imports
- * nothing (a 0-row ReportImport), it can never corrupt the dispatch history.
- */
+/** Same identification rules as the Purosoul handler in fetchEmailReport.js. */
 function matchesSalesReport({ subject, from, attachmentNames }) {
-  const haystack = `${subject} ${from} ${attachmentNames}`;
-  const hasSpreadsheet = /\.(xlsx|xls|csv)\b/i.test(attachmentNames);
-  const fromVendor = /amarjit|afvpl|purosoul|fiscal/i.test(haystack);
-  const reportKeyword = /daily sales|sales report|ledger|dispatch|invoice|report|sale/i.test(
-    `${subject} ${attachmentNames}`
+  const looksLikeReport =
+    /daily sales|sales report/i.test(subject) || /AFVPL|purosoul/i.test(attachmentNames);
+  const fromKnownSender = /amarjit fiscal|afvpl|purosoul/i.test(
+    `${subject} ${from} ${attachmentNames}`
   );
-  return hasSpreadsheet && (fromVendor || reportKeyword);
+  return looksLikeReport && fromKnownSender;
 }
 
 function describeParsed(parsed) {
@@ -86,14 +75,18 @@ function missingMailConfig() {
     .join(', ');
 }
 
-async function fetchUnprocessedReportEmails() {
+async function fetchUnprocessedReportEmails({ force = false } = {}) {
   const { host, port, user, pass, lookbackDays } = env.reportMail;
   const missing = missingMailConfig();
   if (missing) throw new Error(`Report mailbox is not configured — set ${missing}`);
 
-  // Resume from the newest processed email recorded in the database.
+  // Resume from the newest processed email recorded in the database. A forced
+  // run (the manual "Refresh" button) ignores this resume point and re-reads the
+  // latest matching email even if it was already imported — the voucher dedup
+  // in importDispatchWorkbook makes re-processing harmless.
   const lastImport = await ReportImport.findOne({ source: 'EMAIL' }).sort('-emailDate').lean();
-  const lastEmailDate = lastImport?.emailDate ? new Date(lastImport.emailDate).getTime() : null;
+  const lastEmailDate =
+    force || !lastImport?.emailDate ? null : new Date(lastImport.emailDate).getTime();
   // Overlap the last processed day to survive clock differences; the voucher
   // dedup makes re-processing harmless.
   const sinceMs = lastEmailDate ? lastEmailDate - DAY_MS : Date.now() - lookbackDays * DAY_MS;
@@ -124,7 +117,10 @@ async function fetchUnprocessedReportEmails() {
       if (lastEmailDate && (parsed.date?.getTime() || 0) <= lastEmailDate) continue;
       reports.push(parsed);
     }
-    return reports.sort((a, b) => (a.date?.getTime() || 0) - (b.date?.getTime() || 0));
+    const ordered = reports.sort((a, b) => (a.date?.getTime() || 0) - (b.date?.getTime() || 0));
+    // A forced run re-reads only the newest matching report, not the whole
+    // lookback window, so a Refresh click never re-imports weeks of email.
+    return force ? ordered.slice(-1) : ordered;
   } finally {
     await client.logout().catch(() => {});
   }
@@ -160,18 +156,27 @@ export function printSummary(summary) {
 }
 
 /**
- * One full pass: fetch every unprocessed report email and import each one.
- * Assumes the database is already connected. Returns the number of emails processed.
+ * One full pass: fetch report emails and import each one. Assumes the database
+ * is already connected. Pass { force: true } to re-read the latest report even
+ * if it was already imported (the manual "Refresh" button). Returns
+ * { processed, summaries } — the number of emails imported and each import's summary.
  */
-export async function runDispatchEmailImport() {
-  console.log(`[report-fetch] Checking ${env.reportMail.user} for unprocessed sales reports...`);
-  const reports = await fetchUnprocessedReportEmails();
+export async function runDispatchEmailImport({ force = false } = {}) {
+  console.log(
+    `[report-fetch] Checking ${env.reportMail.user} for ${force ? 'the latest' : 'unprocessed'} sales report(s)...`
+  );
+  const reports = await fetchUnprocessedReportEmails({ force });
   if (!reports.length) {
-    console.log('[report-fetch] No new sales-report email — dispatch history is up to date.');
-    return 0;
+    console.log(
+      force
+        ? '[report-fetch] No sales-report email found in the mailbox to import.'
+        : '[report-fetch] No new sales-report email — dispatch history is up to date.'
+    );
+    return { processed: 0, summaries: [] };
   }
 
-  console.log(`[report-fetch] ${reports.length} unprocessed report email(s) found. Importing oldest first...`);
+  console.log(`[report-fetch] ${reports.length} report email(s) to import. Importing oldest first...`);
+  const summaries = [];
   for (const parsed of reports) {
     const attachment = pickAttachment(parsed);
     const savedTo = saveAttachmentCopy(attachment, parsed.date);
@@ -186,8 +191,21 @@ export async function runDispatchEmailImport() {
       emailSubject: parsed.subject || '',
     });
     printSummary(summary);
+    summaries.push(summary);
   }
-  return reports.length;
+  return { processed: reports.length, summaries };
+}
+
+/**
+ * Serializes import passes so the manual "Refresh" and the background scheduler
+ * never open two IMAP sessions (or write two ReportImport records) at once —
+ * each queued call runs after the previous one settles and gets its own result.
+ */
+let importChain = Promise.resolve();
+export function triggerDispatchEmailImport(options = {}) {
+  const run = importChain.catch(() => {}).then(() => runDispatchEmailImport(options));
+  importChain = run.catch(() => {});
+  return run;
 }
 
 /** The report arrives Mon–Sat sometime between 9 AM and ~2 PM IST. */
@@ -220,7 +238,7 @@ export function startDispatchEmailScheduler() {
     if (running || (!force && !isWithinFetchWindow())) return;
     running = true;
     try {
-      await runDispatchEmailImport();
+      await triggerDispatchEmailImport();
     } catch (err) {
       console.error('[report-fetch] Check failed (will retry on next tick):', err.message);
     } finally {
