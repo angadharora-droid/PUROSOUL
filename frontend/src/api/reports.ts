@@ -16,3 +16,9 @@ export async function refreshReportImport() {
     message: res.data.message as string,
   };
 }
+
+/** All party names seen in the imported sales workbooks (A→Z). */
+export async function fetchPartyNames() {
+  const res = await api.get('/reports/parties');
+  return res.data.data as string[];
+}

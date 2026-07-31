@@ -5,7 +5,7 @@ import { getRegistrationTimeline } from '../services/audit.service.js';
 export const create = asyncHandler(async (req, res) => {
   const registration = await registrationService.createRegistration({
     body: req.body,
-    file: req.file,
+    files: req.files,
     user: req.user,
   });
   res.status(201).json({
@@ -18,10 +18,10 @@ export const create = asyncHandler(async (req, res) => {
 export const updateScreenshot = asyncHandler(async (req, res) => {
   const registration = await registrationService.replaceScreenshot({
     id: req.params.id,
-    file: req.file,
+    files: req.files,
     user: req.user,
   });
-  res.json({ success: true, data: registration, message: 'Payment screenshot updated' });
+  res.json({ success: true, data: registration, message: 'Payment attachments updated' });
 });
 
 export const list = asyncHandler(async (req, res) => {

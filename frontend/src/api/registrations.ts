@@ -21,9 +21,10 @@ export async function createRegistration(formData: FormData) {
   return res.data.data as Registration;
 }
 
-export async function updateScreenshot(id: string, file: File) {
+/** Replaces the whole attachment set with the given file(s). */
+export async function updateScreenshot(id: string, files: File[]) {
   const formData = new FormData();
-  formData.append('screenshot', file);
+  for (const file of files) formData.append('screenshot', file);
   const res = await api.patch(`/registrations/${id}/screenshot`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });

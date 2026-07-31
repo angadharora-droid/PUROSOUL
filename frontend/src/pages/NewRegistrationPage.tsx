@@ -9,6 +9,7 @@ import { Card, CardBody, CardHeader } from '@/components/ui/Card';
 import { Input, Select, Textarea } from '@/components/ui/FormControls';
 import FileUpload from '@/components/ui/FileUpload';
 import { fetchSchemes } from '@/api/schemes';
+import { fetchPartyNames } from '@/api/reports';
 import { createRegistration } from '@/api/registrations';
 import { getApiErrorMessage } from '@/lib/api';
 import { formatCurrency, formatNumber, toInputDate } from '@/lib/format';
@@ -27,12 +28,17 @@ interface RegistrationFormValues {
 export default function NewRegistrationPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [screenshot, setScreenshot] = useState<File | null>(null);
+  const [screenshots, setScreenshots] = useState<File[]>([]);
   const [screenshotError, setScreenshotError] = useState<string>();
 
   const { data: schemes = [] } = useQuery({
     queryKey: ['schemes', 'active'],
     queryFn: () => fetchSchemes(true),
+  });
+
+  const { data: partyNames = [] } = useQuery({
+    queryKey: ['party-names'],
+    queryFn: fetchPartyNames,
   });
 
   const {
@@ -64,8 +70,8 @@ export default function NewRegistrationPage() {
   });
 
   const onSubmit = (values: RegistrationFormValues) => {
-    if (!screenshot) {
-      setScreenshotError('A payment screenshot/attachment is required');
+    if (!screenshots.length) {
+      setScreenshotError('At least one payment screenshot/attachment is required');
       return;
     }
     setScreenshotError(undefined);
@@ -78,7 +84,7 @@ export default function NewRegistrationPage() {
     formData.append('paymentMode', values.paymentMode);
     if (values.utrNumber) formData.append('utrNumber', values.utrNumber);
     if (values.remarks) formData.append('remarks', values.remarks);
-    formData.append('screenshot', screenshot);
+    for (const file of screenshots) formData.append('screenshot', file);
 
     mutation.mutate(formData);
   };
@@ -100,9 +106,21 @@ export default function NewRegistrationPage() {
                 label="Party Name"
                 placeholder="e.g. Sharma Traders"
                 required
+                list="party-name-options"
+                autoComplete="off"
+                hint={
+                  partyNames.length
+                    ? 'Pick a name from the sales reports, or type a new one'
+                    : undefined
+                }
                 error={errors.partyName?.message}
                 {...register('partyName', { required: 'Party name is required' })}
               />
+              <datalist id="party-name-options">
+                {partyNames.map((name) => (
+                  <option key={name} value={name} />
+                ))}
+              </datalist>
               <Select
                 label="Scheme"
                 required
@@ -179,13 +197,13 @@ export default function NewRegistrationPage() {
                 {...register('utrNumber')}
               />
               <FileUpload
-                label="Payment Screenshot / Attachment"
+                label="Payment Screenshots / Attachments"
                 required
-                hint="Mandatory for all payment modes"
-                value={screenshot}
-                onChange={(f) => {
-                  setScreenshot(f);
-                  if (f) setScreenshotError(undefined);
+                hint="Mandatory for all payment modes — you can attach several files (up to 10)"
+                value={screenshots}
+                onChange={(files) => {
+                  setScreenshots(files);
+                  if (files.length) setScreenshotError(undefined);
                 }}
                 error={screenshotError}
               />

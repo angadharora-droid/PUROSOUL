@@ -64,6 +64,7 @@ export interface Registration {
   paymentMode: PaymentMode;
   utrNumber?: string;
   screenshotUrl?: string;
+  screenshotUrls?: string[];
   remarks?: string;
   status: RegistrationStatus;
   activationDate?: string;

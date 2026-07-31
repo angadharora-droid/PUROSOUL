@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import Dispatch from '../models/Dispatch.js';
 import SchemeRegistration from '../models/SchemeRegistration.js';
 import ReportImport from '../models/ReportImport.js';
+import Party from '../models/Party.js';
 import User from '../models/User.js';
 import { addDispatch } from './dispatch.service.js';
 import { expireOverdue } from './registration.service.js';
@@ -127,6 +128,31 @@ export function parseSalesWorkbook(buffer) {
   return rows;
 }
 
+/**
+ * Remembers every party name seen in the workbook (matched to a scheme or not)
+ * so the New Registration form can suggest exact ledger spellings. Best-effort:
+ * a failure never blocks the import itself.
+ */
+async function recordPartyNames(rows) {
+  const byKey = new Map();
+  for (const row of rows) byKey.set(normKey(row.party), norm(row.party));
+  if (!byKey.size) return;
+  try {
+    await Party.bulkWrite(
+      [...byKey].map(([key, name]) => ({
+        updateOne: {
+          filter: { key },
+          update: { $set: { name, lastSeenAt: new Date() } },
+          upsert: true,
+        },
+      })),
+      { ordered: false }
+    );
+  } catch (err) {
+    console.error('Failed to record party names from report:', err.message);
+  }
+}
+
 /** System user that automated imports are attributed to (cannot log in). */
 async function ensureImportUser() {
   const email = 'dispatch-import@system.local';
@@ -162,6 +188,7 @@ export async function importDispatchWorkbook(
   };
   if (!rows.length) return finishSummary(summary, { filename, emailDate, emailSubject });
 
+  await recordPartyNames(rows);
   await expireOverdue();
   const user = await ensureImportUser();
 
