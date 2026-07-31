@@ -57,13 +57,13 @@ export function decorate(regDoc) {
   return { ...reg, progress: computeProgress(reg) };
 }
 
-export async function createRegistration({ body, file, user }) {
+export async function createRegistration({ body, files, user }) {
   const scheme = await Scheme.findById(body.scheme);
   if (!scheme) throw new ApiError(404, 'Selected scheme not found');
   if (!scheme.isActive) throw new ApiError(400, 'The selected scheme is inactive');
 
-  // The payment attachment (screenshot/receipt) is compulsory for every payment mode.
-  if (!file) {
+  // At least one payment attachment (screenshot/receipt) is compulsory for every payment mode.
+  if (!files?.length) {
     throw new ApiError(422, 'A payment screenshot/attachment is required');
   }
 
@@ -97,7 +97,8 @@ export async function createRegistration({ body, file, user }) {
     advanceAmount: body.advanceAmount,
     paymentMode: body.paymentMode,
     utrNumber: body.utrNumber || undefined,
-    screenshotUrl: `/uploads/${file.filename}`,
+    screenshotUrl: `/uploads/${files[0].filename}`,
+    screenshotUrls: files.map((f) => `/uploads/${f.filename}`),
     remarks: body.remarks || undefined,
     status: 'ACTIVE',
     activationDate,
@@ -149,22 +150,27 @@ async function notifyValidationEmail(registration, user) {
 }
 
 /**
- * Replaces the payment screenshot on an existing registration — used to restore
+ * Replaces the payment attachments on an existing registration — used to restore
  * attachments whose files were lost (e.g. a redeploy wiped a non-persistent disk).
+ * The uploaded file(s) replace the whole previous set.
  */
-export async function replaceScreenshot({ id, file, user }) {
-  if (!file) throw new ApiError(422, 'A payment screenshot/attachment is required');
+export async function replaceScreenshot({ id, files, user }) {
+  if (!files?.length) throw new ApiError(422, 'A payment screenshot/attachment is required');
 
   const registration = await SchemeRegistration.findById(id);
   if (!registration) throw new ApiError(404, 'Registration not found');
 
-  const previousUrl = registration.screenshotUrl;
-  registration.screenshotUrl = `/uploads/${file.filename}`;
+  const previousUrls = registration.screenshotUrls?.length
+    ? registration.screenshotUrls
+    : [registration.screenshotUrl].filter(Boolean);
+  registration.screenshotUrl = `/uploads/${files[0].filename}`;
+  registration.screenshotUrls = files.map((f) => `/uploads/${f.filename}`);
   await registration.save();
 
-  // Best-effort cleanup of the replaced file; it may already be gone.
-  if (previousUrl?.startsWith('/uploads/')) {
-    const oldPath = path.join(env.uploadDir, path.basename(previousUrl));
+  // Best-effort cleanup of the replaced files; they may already be gone.
+  for (const url of previousUrls) {
+    if (!url.startsWith('/uploads/')) continue;
+    const oldPath = path.join(env.uploadDir, path.basename(url));
     fs.promises.unlink(oldPath).catch(() => {});
   }
 
@@ -172,7 +178,7 @@ export async function replaceScreenshot({ id, file, user }) {
     action: 'SCREENSHOT_UPDATED',
     user,
     registration: registration._id,
-    message: `Payment screenshot re-uploaded for "${registration.partyName}"`,
+    message: `Payment attachment${files.length === 1 ? '' : 's'} re-uploaded for "${registration.partyName}" (${files.length} file${files.length === 1 ? '' : 's'})`,
   });
 
   return decorate(registration);

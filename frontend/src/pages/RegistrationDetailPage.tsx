@@ -34,15 +34,15 @@ export default function RegistrationDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { hasRole } = useAuth();
-  const [screenshotOpen, setScreenshotOpen] = useState(false);
-  const [screenshotMissing, setScreenshotMissing] = useState(false);
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
+  const [imgErrors, setImgErrors] = useState<Set<number>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const replaceMutation = useMutation({
-    mutationFn: (file: File) => updateScreenshot(id, file),
+    mutationFn: (files: File[]) => updateScreenshot(id, files),
     onSuccess: () => {
-      toast.success('Payment screenshot updated');
-      setScreenshotMissing(false);
+      toast.success('Payment attachments updated');
+      setImgErrors(new Set());
       queryClient.invalidateQueries({ queryKey: ['registration', id] });
       queryClient.invalidateQueries({ queryKey: ['timeline', id] });
     },
@@ -50,8 +50,8 @@ export default function RegistrationDetailPage() {
   });
 
   const onFilePicked = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) replaceMutation.mutate(file);
+    const files = Array.from(e.target.files ?? []);
+    if (files.length) replaceMutation.mutate(files);
     e.target.value = ''; // allow picking the same file again
   };
 
@@ -71,17 +71,31 @@ export default function RegistrationDetailPage() {
     queryFn: () => fetchTimeline(id),
   });
 
-  const screenshot = fileUrl(registration?.screenshotUrl);
-  const isPdf = registration?.screenshotUrl?.toLowerCase().endsWith('.pdf');
+  // Older registrations only have the single screenshotUrl; newer ones carry the full set.
+  const attachmentUrls = registration?.screenshotUrls?.length
+    ? registration.screenshotUrls
+    : registration?.screenshotUrl
+      ? [registration.screenshotUrl]
+      : [];
+  const attachments = attachmentUrls.map((u) => ({
+    url: fileUrl(u) as string,
+    isPdf: u.toLowerCase().endsWith('.pdf'),
+  }));
 
-  // The file can vanish when the server redeploys without a persistent disk —
-  // re-upload is offered only when it is actually gone.
-  const { data: fileMissing = false } = useQuery({
-    queryKey: ['screenshot-exists', registration?.screenshotUrl],
-    queryFn: async () => !(await fetch(screenshot as string, { method: 'HEAD' })).ok,
-    enabled: Boolean(screenshot),
+  // The files can vanish when the server redeploys without a persistent disk —
+  // re-upload is offered only when any of them is actually gone.
+  const { data: missingFlags = [] } = useQuery({
+    queryKey: ['screenshot-exists', attachmentUrls],
+    queryFn: async () =>
+      Promise.all(
+        attachments.map((a) =>
+          fetch(a.url, { method: 'HEAD' }).then((r) => !r.ok).catch(() => true)
+        )
+      ),
+    enabled: attachments.length > 0,
   });
-  const screenshotLost = fileMissing || screenshotMissing;
+  const isLost = (i: number) => Boolean(missingFlags[i]) || imgErrors.has(i);
+  const anyLost = attachments.some((_, i) => isLost(i));
 
   const dispatchColumns = useMemo<ColumnDef<Dispatch, any>[]>(
     () => [
@@ -213,33 +227,40 @@ export default function RegistrationDetailPage() {
                 <DetailRow label="UTR Number" value={registration.utrNumber || '—'} />
                 <DetailRow label="Created By" value={registration.createdBy?.name ?? '—'} />
               </dl>
-              {screenshot && (
-                <button
-                  onClick={() =>
-                    isPdf && !screenshotLost ? window.open(screenshot, '_blank') : setScreenshotOpen(true)
-                  }
-                  className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 py-2.5 text-sm font-medium text-primary-600 transition hover:border-primary-400 hover:bg-primary-50 dark:border-gray-700 dark:hover:bg-primary-900/20"
-                >
-                  <ExternalLink className="h-4 w-4" /> View Payment Screenshot
-                </button>
+              {attachments.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  {attachments.map((a, i) => (
+                    <button
+                      key={a.url}
+                      onClick={() =>
+                        a.isPdf && !isLost(i) ? window.open(a.url, '_blank') : setOpenIndex(i)
+                      }
+                      className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 py-2.5 text-sm font-medium text-primary-600 transition hover:border-primary-400 hover:bg-primary-50 dark:border-gray-700 dark:hover:bg-primary-900/20"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      {attachments.length === 1 ? 'View Payment Attachment' : `View Attachment ${i + 1}`}
+                    </button>
+                  ))}
+                </div>
               )}
               {hasRole('sales', 'admin') && (
                 <input
                   ref={fileInputRef}
                   type="file"
                   accept="image/jpeg,image/png,image/webp,application/pdf"
+                  multiple
                   onChange={onFilePicked}
                   className="hidden"
                 />
               )}
-              {hasRole('sales', 'admin') && screenshotLost && (
+              {hasRole('sales', 'admin') && anyLost && (
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={replaceMutation.isPending}
                   className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg py-2 text-xs font-medium text-amber-600 transition hover:text-amber-700 disabled:opacity-60 dark:text-amber-400 dark:hover:text-amber-300"
                 >
                   <ImagePlus className="h-3.5 w-3.5" />
-                  {replaceMutation.isPending ? 'Uploading…' : 'Screenshot file lost — re-upload'}
+                  {replaceMutation.isPending ? 'Uploading…' : 'Attachment file lost — re-upload'}
                 </button>
               )}
               {registration.remarks && (
@@ -259,21 +280,28 @@ export default function RegistrationDetailPage() {
         </div>
       </div>
 
-      <Modal open={screenshotOpen} onClose={() => setScreenshotOpen(false)} title="Payment Screenshot" size="lg">
-        {screenshot && !screenshotLost ? (
+      <Modal
+        open={openIndex !== null}
+        onClose={() => setOpenIndex(null)}
+        title={attachments.length > 1 ? `Payment Attachment ${(openIndex ?? 0) + 1}` : 'Payment Attachment'}
+        size="lg"
+      >
+        {openIndex !== null && attachments[openIndex] && !isLost(openIndex) ? (
           <img
-            src={screenshot}
-            alt="Payment screenshot"
+            src={attachments[openIndex].url}
+            alt={`Payment attachment ${openIndex + 1}`}
             className="mx-auto max-h-[70vh] rounded-lg"
-            onError={() => setScreenshotMissing(true)}
+            onError={() =>
+              setImgErrors((prev) => new Set(prev).add(openIndex))
+            }
           />
         ) : (
           <div className="flex flex-col items-center gap-3 py-10 text-center">
             <ImageOff className="h-10 w-10 text-gray-300 dark:text-gray-600" />
             <div>
-              <p className="font-medium text-gray-900 dark:text-white">Screenshot file is missing on the server</p>
+              <p className="font-medium text-gray-900 dark:text-white">Attachment file is missing on the server</p>
               <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-                It was likely lost during a server redeploy. Upload it again to restore it.
+                It was likely lost during a server redeploy. Upload the attachment(s) again to restore them.
               </p>
             </div>
             {hasRole('sales', 'admin') && (
@@ -283,7 +311,7 @@ export default function RegistrationDetailPage() {
                 loading={replaceMutation.isPending}
                 onClick={() => fileInputRef.current?.click()}
               >
-                <ImagePlus className="h-4 w-4" /> Re-upload screenshot
+                <ImagePlus className="h-4 w-4" /> Re-upload attachments
               </Button>
             )}
           </div>

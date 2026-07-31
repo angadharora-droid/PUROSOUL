@@ -25,7 +25,10 @@ const schemeRegistrationSchema = new mongoose.Schema(
     advanceAmount: { type: Number, required: [true, 'Advance payment is required'], min: 0 },
     paymentMode: { type: String, enum: PAYMENT_MODES, required: [true, 'Payment mode is required'] },
     utrNumber: { type: String, trim: true, uppercase: true, maxlength: 60 },
+    // First payment attachment — kept for records created before multi-attachment support.
     screenshotUrl: { type: String, required: [true, 'Payment attachment is required'] },
+    // Every payment attachment (screenshots/receipts); screenshotUrl is always the first.
+    screenshotUrls: { type: [String], default: undefined },
     remarks: { type: String, trim: true, maxlength: 500 },
     status: { type: String, enum: REGISTRATION_STATUSES, default: 'ACTIVE', index: true },
     activationDate: { type: Date },

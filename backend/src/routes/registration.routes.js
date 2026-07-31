@@ -12,7 +12,7 @@ router.use(protect);
 router.post(
   '/',
   authorize('sales', 'admin'),
-  upload.single('screenshot'),
+  upload.array('screenshot', 10),
   createRegistrationRules,
   validate,
   registrationController.create
@@ -20,7 +20,7 @@ router.post(
 router.patch(
   '/:id/screenshot',
   authorize('sales', 'admin'),
-  upload.single('screenshot'),
+  upload.array('screenshot', 10),
   registrationController.updateScreenshot
 );
 router.get('/', registrationController.list);

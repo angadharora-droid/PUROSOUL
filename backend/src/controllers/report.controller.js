@@ -1,5 +1,6 @@
 import asyncHandler from '../utils/asyncHandler.js';
 import ReportImport from '../models/ReportImport.js';
+import Party from '../models/Party.js';
 import { triggerDispatchEmailImport } from '../services/dispatchEmailFetch.service.js';
 
 /**
@@ -25,4 +26,13 @@ export const refreshReport = asyncHandler(async (_req, res) => {
       : 'Latest report re-read — every invoice was already recorded.';
 
   res.json({ success: true, data: { processed, created, casesAdded, latestReportImport }, message });
+});
+
+/**
+ * Every party name seen in the imported sales workbooks, A→Z. Feeds the
+ * party-name suggestions on the New Registration form.
+ */
+export const listParties = asyncHandler(async (_req, res) => {
+  const parties = await Party.find().sort({ name: 1 }).select('name -_id').lean();
+  res.json({ success: true, data: parties.map((p) => p.name) });
 });
