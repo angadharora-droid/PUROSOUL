@@ -50,8 +50,9 @@ function describeParsed(parsed) {
   };
 }
 
-export function pickAttachment(parsed) {
-  return (parsed.attachments || []).find((a) => SPREADSHEET_EXT.test(a.filename || ''));
+/** Every spreadsheet attachment — a report email may carry several workbooks. */
+export function pickAttachments(parsed) {
+  return (parsed.attachments || []).filter((a) => SPREADSHEET_EXT.test(a.filename || ''));
 }
 
 /** Attachment filenames from an IMAP body structure, without downloading the message. */
@@ -113,7 +114,7 @@ async function fetchUnprocessedReportEmails({ force = false } = {}) {
     const reports = [];
     for await (const msg of client.fetch(candidates, { source: true })) {
       const parsed = await simpleParser(msg.source);
-      if (!matchesSalesReport(describeParsed(parsed)) || !pickAttachment(parsed)) continue;
+      if (!matchesSalesReport(describeParsed(parsed)) || !pickAttachments(parsed).length) continue;
       if (lastEmailDate && (parsed.date?.getTime() || 0) <= lastEmailDate) continue;
       reports.push(parsed);
     }
@@ -127,12 +128,14 @@ async function fetchUnprocessedReportEmails({ force = false } = {}) {
 }
 
 /** Best-effort archive copy; failures never block the import. */
-function saveAttachmentCopy(attachment, emailDate) {
+function saveAttachmentCopy(attachment, emailDate, seq = 0) {
   try {
     fs.mkdirSync(ATTACHMENT_DIR, { recursive: true });
     const stamp = (emailDate || new Date()).toISOString().slice(0, 10);
     const safeName = (attachment.filename || 'report.xlsx').replace(/[^\w.-]+/g, '_');
-    const dest = path.join(ATTACHMENT_DIR, `${stamp}__${safeName}`);
+    // The seq keeps same-named attachments of one email from overwriting each
+    // other, while re-runs of the same email still land on the same files.
+    const dest = path.join(ATTACHMENT_DIR, `${stamp}__${seq ? `${seq + 1}__` : ''}${safeName}`);
     fs.writeFileSync(dest, attachment.content);
     return dest;
   } catch (err) {
@@ -156,10 +159,11 @@ export function printSummary(summary) {
 }
 
 /**
- * One full pass: fetch report emails and import each one. Assumes the database
- * is already connected. Pass { force: true } to re-read the latest report even
- * if it was already imported (the manual "Refresh" button). Returns
- * { processed, summaries } — the number of emails imported and each import's summary.
+ * One full pass: fetch report emails and import every spreadsheet attachment
+ * of each one. Assumes the database is already connected. Pass { force: true }
+ * to re-read the latest report even if it was already imported (the manual
+ * "Refresh" button). Returns { processed, summaries } — the number of emails
+ * imported and one summary per attachment.
  */
 export async function runDispatchEmailImport({ force = false } = {}) {
   console.log(
@@ -178,20 +182,26 @@ export async function runDispatchEmailImport({ force = false } = {}) {
   console.log(`[report-fetch] ${reports.length} report email(s) to import. Importing oldest first...`);
   const summaries = [];
   for (const parsed of reports) {
-    const attachment = pickAttachment(parsed);
-    const savedTo = saveAttachmentCopy(attachment, parsed.date);
-    console.log(`[report-fetch] "${parsed.subject}" (${parsed.date?.toLocaleString('en-IN') || 'no date'})`);
-    if (savedTo) console.log(`[report-fetch] Attachment archived to ${savedTo}`);
+    const attachments = pickAttachments(parsed);
+    console.log(
+      `[report-fetch] "${parsed.subject}" (${parsed.date?.toLocaleString('en-IN') || 'no date'})` +
+        (attachments.length > 1 ? ` — ${attachments.length} workbook attachments` : '')
+    );
 
-    // The import records each run in ReportImport, so a crash mid-catch-up
-    // resumes from the right email instead of starting over.
-    const summary = await importDispatchWorkbook(attachment.content, {
-      filename: attachment.filename || 'sales-report.xlsx',
-      emailDate: parsed.date || new Date(),
-      emailSubject: parsed.subject || '',
-    });
-    printSummary(summary);
-    summaries.push(summary);
+    for (const [i, attachment] of attachments.entries()) {
+      const savedTo = saveAttachmentCopy(attachment, parsed.date, i);
+      if (savedTo) console.log(`[report-fetch] Attachment archived to ${savedTo}`);
+
+      // The import records each run in ReportImport, so a crash mid-catch-up
+      // resumes from the right email instead of starting over.
+      const summary = await importDispatchWorkbook(attachment.content, {
+        filename: attachment.filename || 'sales-report.xlsx',
+        emailDate: parsed.date || new Date(),
+        emailSubject: parsed.subject || '',
+      });
+      printSummary(summary);
+      summaries.push(summary);
+    }
   }
   return { processed: reports.length, summaries };
 }
