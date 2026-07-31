@@ -126,7 +126,7 @@ npm run import:dispatch-email -- --file report.xlsx  # import a file on disk
 ## Business Rules Implemented
 
 - Registrations activate **immediately on creation**: activation = now, **expiry auto-calculated** = activation + scheme validity days. The deadline is a **whole day, not a time**: the scheme stays valid through the end of its expiry day, and expiry is displayed date-only everywhere. Scheme terms are snapshotted so later scheme edits never change running registrations. Registration date can never be in the past.
-- A **payment attachment (screenshot/receipt) is compulsory for every payment mode** (JPG/PNG/WEBP/PDF, ≤ 5 MB, preview before upload); the UTR/reference number is optional.
+- At least one **payment attachment (screenshot/receipt) is compulsory for every payment mode** — up to 10 files per registration (JPG/PNG/WEBP/PDF, ≤ 5 MB each, preview before upload); the UTR/reference number is optional.
 - Saving a registration **automatically sends the validation email** to all configured recipients — the send is recorded in the audit log and a mail failure never blocks the save.
 - Dispatches are **fully automated** — imported from the daily sales report email (see above); there is no manual entry form. Rules enforced on every import: only against active schemes, **globally unique bill numbers** (the Tally voucher number), date must be within activation–expiry.
 - When achieved ≥ target before expiry: status → **Completed**, **Benefit = achieved cases × benefit per case** (keeps accruing on further dispatches within validity), completion email sent.
@@ -141,10 +141,10 @@ npm run import:dispatch-email -- --file report.xlsx  # import a file on disk
 | GET    | `/auth/me` · PATCH `/auth/password` | authed | Profile / change password |
 | GET    | `/schemes` | authed | List schemes (`?active=true`) |
 | POST/PUT/DELETE | `/schemes[/:id]` | admin | Manage scheme master |
-| POST   | `/registrations` | sales, admin | Create registration (multipart, `screenshot` field) |
+| POST   | `/registrations` | sales, admin | Create registration (multipart, repeated `screenshot` field, up to 10 files) |
 | GET    | `/registrations` | authed | Search/filter/paginate (`q, bill, status, scheme, from, to, page, limit`) |
 | GET    | `/registrations/:id` · `/registrations/:id/timeline` | authed | Detail + audit timeline |
-| PATCH  | `/registrations/:id/screenshot` | sales, admin | Replace payment screenshot (multipart, `screenshot` field, audited) |
+| PATCH  | `/registrations/:id/screenshot` | sales, admin | Replace payment attachments (multipart, repeated `screenshot` field, audited) |
 | GET/PUT | `/settings/emails` | admin | Manage validation email recipients |
 | POST   | `/dispatch` (alias `/dispatches`) | sales, admin | Add dispatch entry |
 | GET    | `/dispatch/:registrationId` | authed | Dispatch history |
