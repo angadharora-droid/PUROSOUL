@@ -1,5 +1,11 @@
 export const ROLES = ['admin', 'sales'];
 
+// Login protections
+export const MAX_LOGIN_ATTEMPTS = 5;
+export const LOGIN_LOCK_MINUTES = 15;
+export const LOGIN_RATE_WINDOW_MS = 15 * 60 * 1000;
+export const LOGIN_RATE_MAX = 15;
+
 export const REGISTRATION_STATUSES = ['ACTIVE', 'COMPLETED', 'EXPIRED'];
 
 export const PAYMENT_MODES = ['CASH', 'CHEQUE', 'UPI', 'NEFT', 'RTGS', 'IMPS'];

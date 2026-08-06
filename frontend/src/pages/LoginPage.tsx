@@ -7,9 +7,10 @@ import Button from '@/components/ui/Button';
 import { Input, PasswordInput } from '@/components/ui/FormControls';
 import { useAuth } from '@/context/AuthContext';
 import { getApiErrorMessage } from '@/lib/api';
+import { isValidPhone } from '@/lib/credentials';
 
 interface LoginForm {
-  email: string;
+  identifier: string;
   password: string;
 }
 
@@ -28,7 +29,7 @@ export default function LoginPage() {
   const onSubmit = async (values: LoginForm) => {
     setSubmitting(true);
     try {
-      await login(values.email, values.password);
+      await login(values.identifier, values.password);
       toast.success('Welcome back!');
       navigate(location.state?.from || '/', { replace: true });
     } catch (err) {
@@ -56,15 +57,22 @@ export default function LoginPage() {
 
           <form onSubmit={handleSubmit(onSubmit)} className="mt-6 space-y-4" noValidate>
             <Input
-              label="Email"
-              type="email"
-              placeholder="you@company.com"
-              autoComplete="email"
+              label="Email or phone number"
+              type="text"
+              placeholder="you@company.com or 98765 43210"
+              autoComplete="username"
               required
-              error={errors.email?.message}
-              {...register('email', {
-                required: 'Email is required',
-                pattern: { value: /^\S+@\S+\.\S+$/, message: 'Enter a valid email address' },
+              hint="Phone number sign-in is available for admins only."
+              error={errors.identifier?.message}
+              {...register('identifier', {
+                required: 'Email or phone number is required',
+                validate: (value) => {
+                  const v = value.trim();
+                  if (v.includes('@')) {
+                    return /^\S+@\S+\.\S+$/.test(v) || 'Enter a valid email address';
+                  }
+                  return isValidPhone(v) || 'Enter a valid email address or phone number';
+                },
               })}
             />
             <PasswordInput
