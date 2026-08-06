@@ -7,7 +7,7 @@ import User from '../models/User.js';
 import Scheme from '../models/Scheme.js';
 
 const USERS = [
-  { name: 'Admin User', email: 'admin@company.com', password: 'Admin@1234', role: 'admin' },
+  { name: 'Admin User', email: 'admin@company.com', password: 'Admin@1234', role: 'admin', phone: '9876543210' },
   { name: 'Sales Employee', email: 'sales@company.com', password: 'Sales@1234', role: 'sales' },
 ];
 

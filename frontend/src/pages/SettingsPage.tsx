@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import toast from 'react-hot-toast';
-import { Plus, Moon, Sun, MailPlus, X } from 'lucide-react';
+import { Plus, Moon, Sun, MailPlus, Pencil, X } from 'lucide-react';
 import type { ColumnDef } from '@tanstack/react-table';
 import PageHeader from '@/components/ui/PageHeader';
 import Button from '@/components/ui/Button';
@@ -17,6 +17,7 @@ import { fetchValidationEmails, updateValidationEmails } from '@/api/settings';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { getApiErrorMessage } from '@/lib/api';
+import { isValidPasswordForRole, isValidPhone, passwordRuleMessage } from '@/lib/credentials';
 import type { Role, User } from '@/types';
 
 interface PasswordForm {
@@ -25,11 +26,20 @@ interface PasswordForm {
   confirmPassword: string;
 }
 
+type PasswordMode = 'text' | 'pin4' | 'pin6';
+
 interface NewUserForm {
   name: string;
   email: string;
   password: string;
   role: Role;
+  phone: string;
+}
+
+interface EditUserForm {
+  role: Role;
+  phone: string;
+  password: string;
 }
 
 export default function SettingsPage() {
@@ -41,6 +51,16 @@ export default function SettingsPage() {
 
   // ----- change password -----
   const pwForm = useForm<PasswordForm>();
+  const [pwMode, setPwMode] = useState<PasswordMode>('text');
+  const pinLength = pwMode === 'pin4' ? 4 : 6;
+
+  const changePwMode = (mode: PasswordMode) => {
+    setPwMode(mode);
+    pwForm.setValue('newPassword', '');
+    pwForm.setValue('confirmPassword', '');
+    pwForm.clearErrors(['newPassword', 'confirmPassword']);
+  };
+
   const pwMutation = useMutation({
     mutationFn: (values: PasswordForm) =>
       changePassword({ currentPassword: values.currentPassword, newPassword: values.newPassword }),
@@ -101,12 +121,14 @@ export default function SettingsPage() {
   });
 
   const newUserForm = useForm<NewUserForm>({ defaultValues: { role: 'sales' } });
+  const newUserRole = newUserForm.watch('role');
   const createUserMutation = useMutation({
-    mutationFn: (values: NewUserForm) => createUser(values),
+    mutationFn: (values: NewUserForm) =>
+      createUser({ ...values, phone: values.phone.trim() || undefined }),
     onSuccess: () => {
       toast.success('User created');
       queryClient.invalidateQueries({ queryKey: ['users'] });
-      newUserForm.reset({ name: '', email: '', password: '', role: 'sales' });
+      newUserForm.reset({ name: '', email: '', password: '', role: 'sales', phone: '' });
       setUserModalOpen(false);
     },
     onError: (err) => toast.error(getApiErrorMessage(err)),
@@ -121,10 +143,39 @@ export default function SettingsPage() {
     onError: (err) => toast.error(getApiErrorMessage(err)),
   });
 
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const editForm = useForm<EditUserForm>({ defaultValues: { role: 'sales', phone: '', password: '' } });
+  const editRole = editForm.watch('role');
+
+  const openEditUser = (u: User) => {
+    editForm.reset({ role: u.role, phone: u.phone ?? '', password: '' });
+    setEditingUser(u);
+  };
+
+  const editUserMutation = useMutation({
+    mutationFn: ({ id, values }: { id: string; values: EditUserForm }) =>
+      updateUser(id, {
+        role: values.role,
+        phone: values.phone.trim(),
+        ...(values.password ? { password: values.password } : {}),
+      }),
+    onSuccess: () => {
+      toast.success('User updated');
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      setEditingUser(null);
+    },
+    onError: (err) => toast.error(getApiErrorMessage(err)),
+  });
+
   const userColumns = useMemo<ColumnDef<User, any>[]>(
     () => [
       { accessorKey: 'name', header: 'Name' },
       { accessorKey: 'email', header: 'Email' },
+      {
+        accessorKey: 'phone',
+        header: 'Phone',
+        cell: ({ getValue }) => getValue<string>() || '—',
+      },
       {
         accessorKey: 'role',
         header: 'Role',
@@ -139,18 +190,24 @@ export default function SettingsPage() {
         id: 'actions',
         header: 'Actions',
         enableSorting: false,
-        cell: ({ row }) =>
-          row.original._id !== user?._id && (
-            <Button
-              size="sm"
-              variant={row.original.isActive ? 'outline' : 'secondary'}
-              onClick={() =>
-                toggleUserMutation.mutate({ id: row.original._id, isActive: !row.original.isActive })
-              }
-            >
-              {row.original.isActive ? 'Deactivate' : 'Activate'}
+        cell: ({ row }) => (
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => openEditUser(row.original)}>
+              <Pencil className="h-3.5 w-3.5" /> Edit
             </Button>
-          ),
+            {row.original._id !== user?._id && (
+              <Button
+                size="sm"
+                variant={row.original.isActive ? 'outline' : 'secondary'}
+                onClick={() =>
+                  toggleUserMutation.mutate({ id: row.original._id, isActive: !row.original.isActive })
+                }
+              >
+                {row.original.isActive ? 'Deactivate' : 'Activate'}
+              </Button>
+            )}
+          </div>
+        ),
       },
     ],
     [user?._id, toggleUserMutation]
@@ -211,6 +268,18 @@ export default function SettingsPage() {
               className="space-y-4"
               noValidate
             >
+              {isAdmin && (
+                <Select
+                  label="Password Type"
+                  hint="PIN sign-in is available for admin accounts only."
+                  value={pwMode}
+                  onChange={(e) => changePwMode(e.target.value as PasswordMode)}
+                >
+                  <option value="text">Text password</option>
+                  <option value="pin4">4-digit PIN</option>
+                  <option value="pin6">6-digit PIN</option>
+                </Select>
+              )}
               <PasswordInput
                 label="Current Password"
                 autoComplete="current-password"
@@ -219,22 +288,37 @@ export default function SettingsPage() {
                 {...pwForm.register('currentPassword', { required: 'Current password is required' })}
               />
               <PasswordInput
-                label="New Password"
+                label={pwMode === 'text' ? 'New Password' : `New ${pinLength}-digit PIN`}
                 autoComplete="new-password"
                 required
+                {...(pwMode !== 'text' && { inputMode: 'numeric' as const, maxLength: pinLength })}
                 error={pwForm.formState.errors.newPassword?.message}
-                {...pwForm.register('newPassword', {
-                  required: 'New password is required',
-                  minLength: { value: 8, message: 'Minimum 8 characters' },
-                })}
+                {...pwForm.register(
+                  'newPassword',
+                  pwMode === 'text'
+                    ? {
+                        required: 'New password is required',
+                        minLength: { value: 8, message: 'Minimum 8 characters' },
+                      }
+                    : {
+                        required: 'New PIN is required',
+                        pattern: {
+                          value: pwMode === 'pin4' ? /^\d{4}$/ : /^\d{6}$/,
+                          message: `PIN must be exactly ${pinLength} digits`,
+                        },
+                      }
+                )}
               />
               <PasswordInput
-                label="Confirm New Password"
+                label={pwMode === 'text' ? 'Confirm New Password' : 'Confirm New PIN'}
                 autoComplete="new-password"
                 required
+                {...(pwMode !== 'text' && { inputMode: 'numeric' as const, maxLength: pinLength })}
                 error={pwForm.formState.errors.confirmPassword?.message}
                 {...pwForm.register('confirmPassword', {
-                  validate: (v) => v === pwForm.getValues('newPassword') || 'Passwords do not match',
+                  validate: (v) =>
+                    v === pwForm.getValues('newPassword') ||
+                    (pwMode === 'text' ? 'Passwords do not match' : 'PINs do not match'),
                 })}
               />
               <div className="flex justify-end">
@@ -353,25 +437,84 @@ export default function SettingsPage() {
               pattern: { value: /^\S+@\S+\.\S+$/, message: 'Enter a valid email' },
             })}
           />
-          <PasswordInput
-            label="Password"
-            required
-            error={newUserForm.formState.errors.password?.message}
-            {...newUserForm.register('password', {
-              required: 'Password is required',
-              minLength: { value: 8, message: 'Minimum 8 characters' },
-            })}
-          />
           <Select label="Role" required {...newUserForm.register('role')}>
             <option value="sales">Sales Employee</option>
             <option value="admin">Administrator</option>
           </Select>
+          <PasswordInput
+            label="Password"
+            required
+            hint={passwordRuleMessage(newUserRole)}
+            error={newUserForm.formState.errors.password?.message}
+            {...newUserForm.register('password', {
+              required: 'Password is required',
+              validate: (v) => isValidPasswordForRole(v, newUserRole) || passwordRuleMessage(newUserRole),
+            })}
+          />
+          <Input
+            label="Phone Number"
+            type="tel"
+            hint="Optional — admins can sign in with their phone number."
+            error={newUserForm.formState.errors.phone?.message}
+            {...newUserForm.register('phone', {
+              validate: (v) => !v?.trim() || isValidPhone(v) || 'Enter a valid phone number (10–15 digits)',
+            })}
+          />
           <div className="flex justify-end gap-2">
             <Button type="button" variant="outline" onClick={() => setUserModalOpen(false)}>
               Cancel
             </Button>
             <Button type="submit" loading={createUserMutation.isPending}>
               Create User
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        open={!!editingUser}
+        onClose={() => setEditingUser(null)}
+        title={editingUser ? `Edit ${editingUser.name}` : 'Edit User'}
+      >
+        <form
+          onSubmit={editForm.handleSubmit((v) =>
+            editingUser && editUserMutation.mutate({ id: editingUser._id, values: v })
+          )}
+          className="space-y-4"
+          noValidate
+        >
+          <Select label="Role" required {...editForm.register('role')}>
+            <option value="sales">Sales Employee</option>
+            <option value="admin">Administrator</option>
+          </Select>
+          <Input
+            label="Phone Number"
+            type="tel"
+            hint="Admins can sign in with this number. Leave blank to remove it."
+            error={editForm.formState.errors.phone?.message}
+            {...editForm.register('phone', {
+              validate: (v) => !v.trim() || isValidPhone(v) || 'Enter a valid phone number (10–15 digits)',
+            })}
+          />
+          <PasswordInput
+            label="New Password"
+            autoComplete="new-password"
+            hint={
+              editRole === 'admin'
+                ? 'Leave blank to keep the current password. Admins may use a 4 or 6 digit PIN.'
+                : 'Leave blank to keep the current password.'
+            }
+            error={editForm.formState.errors.password?.message}
+            {...editForm.register('password', {
+              validate: (v) => !v || isValidPasswordForRole(v, editRole) || passwordRuleMessage(editRole),
+            })}
+          />
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => setEditingUser(null)}>
+              Cancel
+            </Button>
+            <Button type="submit" loading={editUserMutation.isPending}>
+              Save Changes
             </Button>
           </div>
         </form>

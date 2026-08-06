@@ -5,7 +5,7 @@ import type { Role, User } from '@/types';
 interface AuthContextValue {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (identifier: string, password: string) => Promise<void>;
   logout: () => void;
   hasRole: (...roles: Role[]) => boolean;
 }
@@ -28,8 +28,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setLoading(false));
   }, []);
 
-  const login = useCallback(async (email: string, password: string) => {
-    const { token, user: loggedIn } = await apiLogin(email, password);
+  const login = useCallback(async (identifier: string, password: string) => {
+    const { token, user: loggedIn } = await apiLogin(identifier, password);
     localStorage.setItem('token', token);
     setUser(loggedIn);
   }, []);

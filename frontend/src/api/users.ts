@@ -6,12 +6,21 @@ export async function fetchUsers() {
   return res.data.data as User[];
 }
 
-export async function createUser(payload: { name: string; email: string; password: string; role: Role }) {
+export async function createUser(payload: {
+  name: string;
+  email: string;
+  password: string;
+  role: Role;
+  phone?: string;
+}) {
   const res = await api.post('/users', payload);
   return res.data.data as User;
 }
 
-export async function updateUser(id: string, payload: { isActive?: boolean; role?: Role }) {
+export async function updateUser(
+  id: string,
+  payload: { isActive?: boolean; role?: Role; phone?: string; password?: string }
+) {
   const res = await api.patch(`/users/${id}`, payload);
   return res.data.data as User;
 }
