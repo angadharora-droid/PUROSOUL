@@ -6,6 +6,12 @@ export async function login(identifier: string, password: string) {
   return res.data.data as { token: string; user: User };
 }
 
+/** Central sign-on: exchanges the portal's hand-off token for the same { token, user } a password login returns. */
+export async function ssoLogin(ssoToken: string) {
+  const res = await api.post('/auth/sso', { token: ssoToken });
+  return res.data.data as { token: string; user: User };
+}
+
 export async function fetchMe() {
   const res = await api.get('/auth/me');
   return res.data.data as User;

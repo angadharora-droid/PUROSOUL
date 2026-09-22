@@ -1,6 +1,25 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { fetchMe, login as apiLogin } from '@/api/auth';
+import { fetchMe, login as apiLogin, ssoLogin as apiSsoLogin } from '@/api/auth';
+import { resolveSsoToken, ssoLogout } from '@/lib/sso';
 import type { Role, User } from '@/types';
+
+/**
+ * Central sign-on: with no local session, the portal cookie may still identify
+ * this visitor. Exchanges the portal's hand-off token for a normal session and
+ * stores it exactly as login() does. Resolves to the user, or null when SSO is
+ * off, the visitor is not signed in to the portal, or no account is linked.
+ */
+async function restoreFromSso(): Promise<User | null> {
+  const ssoToken = await resolveSsoToken();
+  if (!ssoToken) return null;
+  try {
+    const { token, user } = await apiSsoLogin(ssoToken);
+    localStorage.setItem('token', token);
+    return user;
+  } catch {
+    return null;
+  }
+}
 
 interface AuthContextValue {
   user: User | null;
@@ -19,7 +38,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) {
-      setLoading(false);
+      // No local session: try the portal before showing the login page.
+      // `loading` stays true meanwhile so ProtectedRoute keeps its spinner.
+      restoreFromSso()
+        .then((ssoUser) => {
+          if (ssoUser) setUser(ssoUser);
+        })
+        .finally(() => setLoading(false));
       return;
     }
     fetchMe()
@@ -35,6 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
+    void ssoLogout(); // end the portal session too, or the next load signs back in
     localStorage.removeItem('token');
     setUser(null);
   }, []);

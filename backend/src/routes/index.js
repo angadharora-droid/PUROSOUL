@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import authRoutes from './auth.routes.js';
+import ssoRoutes from './sso.routes.js';
 import schemeRoutes from './scheme.routes.js';
 import registrationRoutes from './registration.routes.js';
 import dispatchRoutes from './dispatch.routes.js';
@@ -13,6 +14,7 @@ import { protect } from '../middleware/auth.js';
 const router = Router();
 
 router.use('/auth', authRoutes);
+router.use('/sso', ssoRoutes); // central sign-on directory (shared-secret guarded)
 router.use('/schemes', schemeRoutes);
 router.use('/registrations', registrationRoutes);
 router.use('/dispatches', dispatchRoutes);

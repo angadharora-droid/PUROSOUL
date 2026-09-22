@@ -1,7 +1,9 @@
+import mongoose from 'mongoose';
 import User from '../models/User.js';
 import ApiError from '../utils/ApiError.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import { signToken } from '../middleware/auth.js';
+import { verifySsoToken } from '../lib/ssoClient.js';
 import { phonesMatch } from '../utils/credentials.js';
 import { MAX_LOGIN_ATTEMPTS, LOGIN_LOCK_MINUTES } from '../config/constants.js';
 
@@ -45,6 +47,28 @@ export const login = asyncHandler(async (req, res) => {
   }
 
   if (!user.isActive) throw new ApiError(403, 'Your account has been deactivated');
+
+  const token = signToken(user);
+  res.json({ success: true, data: { token, user: user.toJSON() } });
+});
+
+/**
+ * Central sign-on from the CPG portal. The browser brings a hand-off token; the
+ * auth service tells us which local user it belongs to and the response is the
+ * same as a password login. Does nothing until AUTH_SERVICE_URL is set.
+ */
+export const ssoLogin = asyncHandler(async (req, res) => {
+  const ssoToken = typeof req.body?.token === 'string' ? req.body.token : '';
+  if (!ssoToken) throw new ApiError(400, 'token is required');
+
+  const verified = await verifySsoToken(ssoToken);
+  if (!verified) throw new ApiError(401, 'SSO sign-in failed');
+
+  // The link table stores this app's Mongo _id; anything else can't match.
+  const user = mongoose.isValidObjectId(verified.localUserId)
+    ? await User.findById(verified.localUserId)
+    : null;
+  if (!user || !user.isActive) throw new ApiError(404, 'No account linked');
 
   const token = signToken(user);
   res.json({ success: true, data: { token, user: user.toJSON() } });

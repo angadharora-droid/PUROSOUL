@@ -12,3 +12,5 @@ backend/data/
 registration-pdf-preview.pdf
 Thumbs.db
 .DS_Store
+.env.*
+*.env
