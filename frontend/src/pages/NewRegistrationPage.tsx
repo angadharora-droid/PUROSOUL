@@ -11,9 +11,17 @@ import FileUpload from '@/components/ui/FileUpload';
 import { fetchSchemes } from '@/api/schemes';
 import { fetchPartyNames } from '@/api/reports';
 import { createRegistration } from '@/api/registrations';
+import { useAuth } from '@/context/AuthContext';
 import { getApiErrorMessage } from '@/lib/api';
-import { formatCurrency, formatNumber, toInputDate } from '@/lib/format';
+import { formatCurrency, formatDate, formatNumber, toInputDate } from '@/lib/format';
 import { PAYMENT_MODES, type PaymentMode } from '@/types';
+
+/** Local-midnight Date for a yyyy-mm-dd input value, shifted by `days`. */
+function inputDateToLocal(value: string, days = 0): Date {
+  const d = new Date(`${value}T00:00:00`);
+  d.setDate(d.getDate() + days);
+  return d;
+}
 
 interface RegistrationFormValues {
   partyName: string;
@@ -28,6 +36,7 @@ interface RegistrationFormValues {
 export default function NewRegistrationPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { hasRole } = useAuth();
   const [screenshots, setScreenshots] = useState<File[]>([]);
   const [screenshotError, setScreenshotError] = useState<string>();
 
@@ -57,6 +66,14 @@ export default function NewRegistrationPage() {
 
   const selectedSchemeId = watch('scheme');
   const selectedScheme = schemes.find((s) => s._id === selectedSchemeId);
+
+  // Only admins may backdate; a backdated scheme's validity runs from the registration date.
+  const isAdmin = hasRole('admin');
+  const today = toInputDate();
+  const registrationDate = watch('registrationDate');
+  const isBackdated = !!registrationDate && registrationDate < today;
+  const backdatedExpiry =
+    isBackdated && selectedScheme ? inputDateToLocal(registrationDate, selectedScheme.validityDays) : null;
 
   const mutation = useMutation({
     mutationFn: (formData: FormData) => createRegistration(formData),
@@ -143,13 +160,27 @@ export default function NewRegistrationPage() {
               <Input
                 label="Registration Date"
                 type="date"
-                min={toInputDate()}
+                min={isAdmin ? undefined : today}
                 required
-                hint="Previous dates cannot be selected"
+                hint={
+                  isAdmin
+                    ? 'Admins can pick a past date — validity then runs from that date'
+                    : 'Previous dates cannot be selected'
+                }
                 error={errors.registrationDate?.message}
                 {...register('registrationDate', {
                   required: 'Registration date is required',
-                  validate: (v) => v >= toInputDate() || 'Registration date cannot be in the past',
+                  validate: (v) => {
+                    if (v >= toInputDate()) return true;
+                    if (!isAdmin) return 'Registration date cannot be in the past';
+                    if (
+                      selectedScheme &&
+                      inputDateToLocal(v, selectedScheme.validityDays) < inputDateToLocal(toInputDate())
+                    ) {
+                      return `The ${selectedScheme.validityDays}-day validity from this date has already ended`;
+                    }
+                    return true;
+                  },
                 })}
               />
             </CardBody>
@@ -264,10 +295,19 @@ export default function NewRegistrationPage() {
                       {selectedScheme.description}
                     </p>
                   )}
-                  <p className="rounded-lg bg-primary-50 p-3 text-xs text-primary-800 dark:bg-primary-900/20 dark:text-primary-300">
-                    The scheme activates as soon as it is submitted — the expiry date is calculated
-                    automatically from today plus the scheme validity.
-                  </p>
+                  {backdatedExpiry ? (
+                    <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+                      Backdated registration — the scheme counts as active from{' '}
+                      {formatDate(inputDateToLocal(registrationDate))} and expires on{' '}
+                      {formatDate(backdatedExpiry)}. Invoices from that date onward count toward the
+                      target.
+                    </p>
+                  ) : (
+                    <p className="rounded-lg bg-primary-50 p-3 text-xs text-primary-800 dark:bg-primary-900/20 dark:text-primary-300">
+                      The scheme activates as soon as it is submitted — the expiry date is calculated
+                      automatically from today plus the scheme validity.
+                    </p>
+                  )}
                 </dl>
               ) : (
                 <p className="text-sm text-gray-500 dark:text-gray-400">

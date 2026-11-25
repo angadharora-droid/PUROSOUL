@@ -12,8 +12,9 @@ export const createRegistrationRules = [
     .optional({ values: 'falsy' })
     .isISO8601()
     .withMessage('Invalid registration date')
-    .custom((value) => {
-      if (new Date(value) < startOfDay()) {
+    .custom((value, { req }) => {
+      // Admins may backdate a registration (e.g. one taken earlier but entered late).
+      if (new Date(value) < startOfDay() && req.user?.role !== 'admin') {
         throw new Error('Registration date cannot be in the past');
       }
       return true;

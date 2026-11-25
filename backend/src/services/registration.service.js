@@ -75,13 +75,25 @@ export async function createRegistration({ body, files, user }) {
     );
   }
 
+  const today = startOfDay();
   const registrationDate = body.registrationDate ? new Date(body.registrationDate) : new Date();
-  if (registrationDate < startOfDay()) {
+  const backdated = registrationDate < today;
+  if (backdated && user.role !== 'admin') {
     throw new ApiError(422, 'Registration date cannot be in the past');
   }
 
-  // Schemes activate immediately on registration; validity runs from now.
-  const activationDate = new Date();
+  // Schemes activate immediately on registration and validity runs from now — except an
+  // admin-backdated registration, which is valid from its registration date so that
+  // invoices since then count toward the target.
+  const activationDate = backdated ? startOfDay(registrationDate) : new Date();
+  // Deadline is a whole day, not a time: valid through the end of the last validity day.
+  const expiryDate = endOfDay(addDays(activationDate, scheme.validityDays));
+  if (expiryDate < today) {
+    throw new ApiError(
+      422,
+      `With ${scheme.validityDays} days validity, a registration dated ${registrationDate.toLocaleDateString('en-IN')} would already have expired on ${expiryDate.toLocaleDateString('en-IN')}`
+    );
+  }
 
   const registration = await SchemeRegistration.create({
     partyName: body.partyName,
@@ -102,8 +114,7 @@ export async function createRegistration({ body, files, user }) {
     remarks: body.remarks || undefined,
     status: 'ACTIVE',
     activationDate,
-    // Deadline is a whole day, not a time: valid through the end of the last validity day.
-    expiryDate: endOfDay(addDays(activationDate, scheme.validityDays)),
+    expiryDate,
     createdBy: user._id,
   });
 
@@ -111,7 +122,9 @@ export async function createRegistration({ body, files, user }) {
     action: 'REGISTRATION_CREATED',
     user,
     registration: registration._id,
-    message: `Registration created for "${registration.partyName}" under scheme "${scheme.name}" — active until ${registration.expiryDate.toLocaleDateString('en-IN')}`,
+    message:
+      `Registration created for "${registration.partyName}" under scheme "${scheme.name}" — active until ${registration.expiryDate.toLocaleDateString('en-IN')}` +
+      (backdated ? ` (backdated to ${registrationDate.toLocaleDateString('en-IN')})` : ''),
   });
 
   // Validation email goes out automatically on save; a failure never blocks the save.
